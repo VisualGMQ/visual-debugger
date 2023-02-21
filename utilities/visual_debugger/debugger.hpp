@@ -1,3 +1,5 @@
+#pragma once
+
 #include "net.hpp"
 #include "draw_commands.hpp"
 

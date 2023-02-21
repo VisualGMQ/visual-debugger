@@ -1,3 +1,4 @@
+#define NET_IMPLEMENTATION
 #include "debugger.hpp"
 
 int main() {
