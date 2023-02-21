@@ -11,7 +11,6 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <iostream>
-#include <string_view>
 #include <unordered_map>
 #include <array>
 #include <string>
@@ -24,7 +23,7 @@ namespace net
 
 #define MAXCONN SOMAXCONN
 
-static std::unordered_map<int, std::string_view> ErrorStrMap = {
+static std::unordered_map<int, const char*> ErrorStrMap = {
     {WSA_INVALID_HANDLE, "WSA_INVALID_HANDLE"},
     {WSA_NOT_ENOUGH_MEMORY, "WSA_NOT_ENOUGH_MEMORY"},
     {WSA_INVALID_PARAMETER, "WSA_INVALID_PARAMETER"},
@@ -302,8 +301,8 @@ constexpr std::array<uint8_t, 2> FlagsMapper {
 // function declarations
 
 extern int GetLastErrorCode();
-extern std::string_view GetLastError();
-extern std::string_view Error2Str(int);
+extern const char* GetLastError();
+extern const char* Error2Str(int);
 
 extern [[nodiscard]] std::unique_ptr<Net> Init();
 
@@ -337,12 +336,16 @@ int GetLastErrorCode() {
     return WSAGetLastError();
 }
 
-std::string_view GetLastError() {
+const char* GetLastError() {
     return Error2Str(WSAGetLastError());
 }
 
-std::string_view Error2Str(int error) {
-    return ErrorStrMap[error];
+const char* Error2Str(int error) {
+    auto it = ErrorStrMap.find(error);
+    if (it != ErrorStrMap.end()) {
+        return it->second;
+    }
+    return "Unknown Error";
 }
 
 Socket::Socket(SOCKET s) : s_(s) {}
