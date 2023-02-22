@@ -15,6 +15,7 @@
 #include <array>
 #include <string>
 #include <utility>
+#include <vector>
 
 #pragma comment(lib, "Ws2_32.lib")
 
@@ -242,7 +243,7 @@ public:
     int Bind();
     int Listen(int backlog = MAXCONN);
     void Close();
-    Result<int, std::unique_ptr<Socket>> Accept();
+    Result<int, std::unique_ptr<Socket>> Accept(sockaddr&);
     bool Valid() const;
     int Connect();
 
@@ -405,8 +406,9 @@ int Socket::EnableNoBlock() {
     return result;
 }
 
-Result<int, std::unique_ptr<Socket>> Socket::Accept() {
-    SOCKET clientSocket = accept(s_, nullptr, nullptr);
+Result<int, std::unique_ptr<Socket>> Socket::Accept(sockaddr& addr) {
+    int len = sizeof(sockaddr);
+    SOCKET clientSocket = accept(s_, &addr, &len);
     int result = 0;
     if (clientSocket == INVALID_SOCKET) {
         result = WSAGetLastError();

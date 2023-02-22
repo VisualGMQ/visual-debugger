@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <vector>
 #include <memory>
+#include <iostream>
 
 namespace debugger {
 
@@ -68,6 +69,11 @@ struct Vec3 final {
     }
 };
 
+inline std::ostream& operator<<(std::ostream& o, const Vec3& v) {
+    o << "Vec3[" << v.x << ", " << v.y << ", " << v.z << "]";
+    return o;
+}
+
 struct Color final {
     uint8_t r, g, b;
 
@@ -95,6 +101,11 @@ struct Color final {
     }
 
 };
+
+inline std::ostream& operator<<(std::ostream& o, const Color& v) {
+    o << "Color[" << v.r << ", " << v.g << ", " << v.b << "]";
+    return o;
+}
 
 struct LineCmd final {
     Vec3 a, b;

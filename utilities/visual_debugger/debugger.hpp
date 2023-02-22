@@ -5,7 +5,7 @@
 
 namespace debugger {
 
-constexpr uint16_t PORT = 8080;
+constexpr uint16_t PORT = 12757;
 
 class VisualDebugger {
 public:
