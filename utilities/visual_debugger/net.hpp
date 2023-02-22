@@ -229,8 +229,9 @@ private:
 
 class Socket final {
 public:
-    Socket(SOCKET s);
-    Socket(const AddrInfo& addr);
+    Socket() = default;
+    explicit Socket(SOCKET s);
+    explicit Socket(const AddrInfo& addr);
     Socket(Socket&&);
     Socket(const Socket&) = delete;
     ~Socket();
@@ -380,6 +381,7 @@ bool Socket::Valid() const {
 
 void Socket::Close() {
     if (Valid()) {
+        shutdown(s_, SD_BOTH);
         closesocket(s_);
         s_ = INVALID_SOCKET;
     }

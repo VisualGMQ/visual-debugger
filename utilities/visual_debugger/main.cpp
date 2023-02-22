@@ -1,12 +1,29 @@
+#define NK_INCLUDE_FIXED_TYPES
+#define NK_INCLUDE_STANDARD_IO
+#define NK_INCLUDE_STANDARD_VARARGS
+#define NK_INCLUDE_DEFAULT_ALLOCATOR
+#define NK_INCLUDE_VERTEX_BUFFER_OUTPUT
+#define NK_INCLUDE_FONT_BAKING
+#define NK_INCLUDE_DEFAULT_FONT
+#include "nuklear.h"
+#include "nuklear_sdl_renderer.h"
 #include "app/app.hpp"
 #include "net.hpp"
 #include <variant>
 #include "draw_commands.hpp"
 
+enum class NetState {
+    ClientClosing,
+    Accepting,
+    Connected,
+};
+
 struct NetContext {
     std::unique_ptr<net::Net> net = nullptr;
     net::Socket* serverSock = nullptr;
-    std::unique_ptr<net::Socket> clienetSock = nullptr;
+    std::unique_ptr<net::Socket> clientSock = nullptr;
+    std::string clientAddr = "";
+    NetState state = NetState::ClientClosing;
 };
 
 using Cmd = std::variant<debugger::LineCmd, debugger::PlaneCmd, debugger::PointCmd>;
@@ -14,6 +31,51 @@ using Cmd = std::variant<debugger::LineCmd, debugger::PlaneCmd, debugger::PointC
 struct CmdContext {
     std::vector<Cmd> cmds;
 };
+
+void NuklearStartupSystem(ecs::Commands& cmd, ecs::Resources resources) {
+    auto& window = resources.Get<Window>();
+    auto& renderer = resources.Get<Renderer>();
+    auto ctx = nk_sdl_init(window.Raw(), renderer.Raw());
+
+    /* Load Fonts: if none of these are loaded a default font will be used  */
+    {
+        float font_scale = 1;
+        struct nk_font_atlas *atlas;
+        struct nk_font_config config = nk_font_config(0);
+        struct nk_font *font;
+
+        /* set up the font atlas and add desired font; note that font sizes are
+         * multiplied by font_scale to produce better results at higher DPIs */
+        nk_sdl_font_stash_begin(&atlas);
+        font = nk_font_atlas_add_default(atlas, 13 * font_scale , &config);
+        nk_sdl_font_stash_end();
+
+        /* this hack makes the font appear to be scaled down to the desired
+         * size and is only necessary when font_scale > 1 */
+        font->handle.height /= font_scale;
+        /*nk_style_load_all_cursors(ctx, atlas->cursors);*/
+        nk_style_set_font(ctx, &font->handle);
+    }
+
+    cmd.SetResource<nk_context*>(std::move(ctx));
+}
+
+std::unique_ptr<net::Socket> AcceptClient(net::Socket* socket, sockaddr& addr) {
+    int iResult;
+
+    std::unique_ptr<net::Socket> sock;
+    // do {
+        auto acceptResult = socket->Accept(addr);
+        sock = std::move(acceptResult.value);
+        iResult = acceptResult.result;
+    // } while(iResult == WSAEWOULDBLOCK);
+    if (iResult == WSAEWOULDBLOCK) {
+        return nullptr;
+    }
+
+    return std::move(sock);
+}
+
 
 void StartupSystem(ecs::Commands& cmd, ecs::Resources resources) {
     auto& window = resources.Get<Window>();
@@ -28,43 +90,77 @@ void StartupSystem(ecs::Commands& cmd, ecs::Resources resources) {
 
     socket->EnableNoBlock();
 
-    int iResult;
-
-    std::unique_ptr<net::Socket> sock;
-
-    sockaddr addr;
-    do {
-        auto acceptResult = socket->Accept(addr);
-        sock = std::move(acceptResult.value);
-        iResult = acceptResult.result;
-    } while(iResult == WSAEWOULDBLOCK);
-    LOGI("adress: ", inet_ntoa(*(struct in_addr *)(&addr)));
-
-    LOGI("accepted OK");
-
-    cmd.SetResource<NetContext>(NetContext{std::move(netInst), socket, std::move(sock)});
+    cmd.SetResource<NetContext>(NetContext{std::move(netInst), socket, std::make_unique<net::Socket>()});
     cmd.SetResource<CmdContext>(CmdContext{});
 }
 
-void UpdateSystem(ecs::Commands& cmd, ecs::Queryer, ecs::Resources resources, ecs::Events&) {
+bool IsClientValid(const std::unique_ptr<net::Socket>& client) {
+    return client && client->Valid();
+}
+
+void UpdateSystem(ecs::Commands& cmd, ecs::Querier, ecs::Resources resources, ecs::Events&) {
     auto& netContext = resources.Get<NetContext>();
     auto& exitTrigger = resources.Get<ExitTrigger>();
     auto& cmdContext = resources.Get<CmdContext>();
+    auto& nkcontext = resources.Get<nk_context*>();
 
-    if (!netContext.clienetSock->Valid()) {
+    if (nk_begin(
+            nkcontext, "Console", nk_rect(0, 0, 200, 400),
+            NK_WINDOW_SCALABLE | NK_WINDOW_MOVABLE | NK_WINDOW_MINIMIZABLE)) {
+        nk_layout_row_dynamic(nkcontext, 30, 1);
+
+        std::string str = "Client State: ";
+        if (IsClientValid(netContext.clientSock)) {
+            str += "Connected";
+        } else {
+            str += "Closing";
+        }
+        nk_label(nkcontext, str.c_str(), NK_TEXT_ALIGN_LEFT | NK_TEXT_ALIGN_CENTERED);
+
+        str = "Start Accept";
+        if (IsClientValid(netContext.clientSock)) {
+            str = "Close Connection";
+        }
+        if (netContext.state == NetState::Accepting) {
+            str = "Accepting...";
+        }
+        if (nk_button_label(nkcontext, str.c_str())) {
+            if (IsClientValid(netContext.clientSock)) {
+                netContext.clientSock->Close();
+                netContext.state = NetState::ClientClosing;
+            } else {
+                netContext.state = NetState::Accepting;
+            }
+        }
+        if (IsClientValid(netContext.clientSock)) {
+            nk_label(nkcontext,
+                     ("client address: " + netContext.clientAddr).c_str(),
+                     NK_TEXT_ALIGN_LEFT | NK_TEXT_ALIGN_CENTERED);
+        }
+    }
+    nk_end(nkcontext);
+
+    if (netContext.state == NetState::Accepting) {
+        sockaddr addr;
+        netContext.clientSock = AcceptClient(netContext.serverSock, addr);
+        netContext.clientAddr = inet_ntoa(*(in_addr*)&addr);
+    }
+
+    if (!IsClientValid(netContext.clientSock)) {
         return;
     }
 
+    netContext.state = NetState::Connected;
+
     char buf[4096] = {0};
-    int len = netContext.clienetSock->Recv(buf, sizeof(buf));
+    int len = netContext.clientSock->Recv(buf, sizeof(buf));
     int code = net::GetLastErrorCode();
     if (code == WSAEWOULDBLOCK || code == WSAETIMEDOUT) {
         return;
     }
     if (len <= 0) {
-        netContext.clienetSock->Close();
-        netContext.serverSock->Close();
-        netContext.net.reset();
+        netContext.clientSock->Close();
+        netContext.state = NetState::ClientClosing;
 
         if (len < 0) {
             LOGE("net error: ", net::Error2Str(code), ", ", code);
@@ -84,7 +180,8 @@ void UpdateSystem(ecs::Commands& cmd, ecs::Queryer, ecs::Resources resources, ec
         case debugger::CmdType::Line: {
             auto cmd = debugger::LineCmd::Deserialize(ptr);
             cmdContext.cmds.push_back(cmd);
-            LOGI("recived LineCmd, a: ", cmd.a, "\n\tb:", cmd.b, "\n\tcolor:", cmd.color);
+            LOGI("recived LineCmd, a: ", cmd.a, "\n\tb:", cmd.b,
+                 "\n\tcolor:", cmd.color);
         } break;
         case debugger::CmdType::Point: {
             auto cmd = debugger::PointCmd::Deserialize(ptr);
@@ -102,20 +199,6 @@ void UpdateSystem(ecs::Commands& cmd, ecs::Queryer, ecs::Resources resources, ec
         } break;
         default:
             LOGI("recived unknown cmd: ", static_cast<int>(cmdType));
-    }
-}
-
-void TestRenderSystem(ecs::Commands& cmd, ecs::Queryer,
-                      ecs::Resources resources, ecs::Events&) {
-    static float x = 0;
-
-    auto& renderer = resources.Get<Renderer>();
-    renderer.SetDrawColor(Color{0, 255, 0});
-    renderer.DrawCircle({x, 100}, 50);
-
-    x += 5;
-    if (x > 1024) {
-        x = 0;
     }
 }
 
@@ -149,7 +232,7 @@ struct Visitor final {
     Renderer& renderer_;
 };
 
-void RenderSystem(ecs::Commands& cmd, ecs::Queryer, ecs::Resources resources,
+void RenderSystem(ecs::Commands& cmd, ecs::Querier, ecs::Resources resources,
                   ecs::Events&) {
     auto& renderer = resources.Get<Renderer>();
     auto& cmdContext = resources.Get<CmdContext>();
@@ -159,16 +242,32 @@ void RenderSystem(ecs::Commands& cmd, ecs::Queryer, ecs::Resources resources,
     }
 }
 
+void NuklearRenderSystem(ecs::Commands& cmd, ecs::Querier,
+                         ecs::Resources resources, ecs::Events&) {
+    nk_sdl_render(NK_ANTI_ALIASING_ON);
+}
+
 class VisualDebugger : public App {
 public:
     VisualDebugger() {
         auto& world = GetWorld();
         world.AddPlugins<DefaultPlugins>()
+            .AddStartupSystem(NuklearStartupSystem)
             .AddStartupSystem(StartupSystem)
             .AddSystem(UpdateSystem)
-            // .AddSystem(TestRenderSystem)
+            .AddSystem(NuklearRenderSystem)
             .AddSystem(RenderSystem)
-            .AddSystem(ExitTrigger::DetectExitSystem);
+            .AddSystem(ExitTrigger::DetectExitSystem)
+            .SetResource<ExtraEventHandler>(ExtraEventHandler(
+                [&](const SDL_Event& event) {
+                    nk_sdl_handle_event(const_cast<SDL_Event*>(&event));
+                },
+                [](ecs::Resources resources) {
+                    nk_input_begin(resources.Get<nk_context*>());
+                },
+                [](ecs::Resources resources) {
+                    nk_input_end(resources.Get<nk_context*>());
+                }));
     }
 };
 
