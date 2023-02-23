@@ -4,6 +4,7 @@
 #include <vector>
 #include <memory>
 #include <iostream>
+#include <fstream>
 
 namespace debugger {
 
@@ -67,6 +68,16 @@ struct Vec3 final {
         PutBuf(buf, &y, 4);
         PutBuf(buf, &z, 4);
     }
+
+    void Output2File(std::ofstream& file) {
+        file << x << " " << y << " " << z << " ";
+    }
+
+    static Vec3 FromFile(std::ifstream& file) {
+        Vec3 v;
+        file >> v.x >> v.y >> v.z;
+        return v;
+    }
 };
 
 inline std::ostream& operator<<(std::ostream& o, const Vec3& v) {
@@ -103,7 +114,7 @@ struct Color final {
 };
 
 inline std::ostream& operator<<(std::ostream& o, const Color& v) {
-    o << "Color[" << v.r << ", " << v.g << ", " << v.b << "]";
+    o << "Color[" << static_cast<int>(v.r) << ", " << static_cast<int>(v.g) << ", " << static_cast<int>(v.b) << "]";
     return o;
 }
 

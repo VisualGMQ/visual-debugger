@@ -58,6 +58,7 @@ void NuklearStartupSystem(ecs::Commands& cmd, ecs::Resources resources) {
     }
 
     cmd.SetResource<nk_context*>(std::move(ctx));
+    cmd.SetResource<Transform>({});
 }
 
 std::unique_ptr<net::Socket> AcceptClient(net::Socket* socket, sockaddr& addr) {
@@ -92,6 +93,9 @@ void StartupSystem(ecs::Commands& cmd, ecs::Resources resources) {
 
     cmd.SetResource<NetContext>(NetContext{std::move(netInst), socket, std::make_unique<net::Socket>()});
     cmd.SetResource<CmdContext>(CmdContext{});
+
+    std::ofstream file("./debugger-log.txt");
+    cmd.SetResource<std::ofstream>(std::move(file));
 }
 
 bool IsClientValid(const std::unique_ptr<net::Socket>& client) {
@@ -103,9 +107,12 @@ void UpdateSystem(ecs::Commands& cmd, ecs::Querier, ecs::Resources resources, ec
     auto& exitTrigger = resources.Get<ExitTrigger>();
     auto& cmdContext = resources.Get<CmdContext>();
     auto& nkcontext = resources.Get<nk_context*>();
+    auto& transform = resources.Get<Transform>();
+    auto& mouse = resources.Get<Mouse>();
+    auto& outputFile = resources.Get<std::ofstream>();
 
     if (nk_begin(
-            nkcontext, "Console", nk_rect(0, 0, 200, 400),
+            nkcontext, "Console", nk_rect(0, 0, 400, 200),
             NK_WINDOW_SCALABLE | NK_WINDOW_MOVABLE | NK_WINDOW_MINIMIZABLE)) {
         nk_layout_row_dynamic(nkcontext, 30, 1);
 
@@ -137,6 +144,14 @@ void UpdateSystem(ecs::Commands& cmd, ecs::Querier, ecs::Resources resources, ec
                      ("client address: " + netContext.clientAddr).c_str(),
                      NK_TEXT_ALIGN_LEFT | NK_TEXT_ALIGN_CENTERED);
         }
+        nk_label(nkcontext,
+                 ("coordination: " + std::to_string(transform.position.x) +
+                  ", " + std::to_string(transform.position.y))
+                     .c_str(),
+                 NK_TEXT_ALIGN_LEFT | NK_TEXT_ALIGN_CENTERED);
+        if (nk_button_label(nkcontext, "Clear")) {
+            cmdContext.cmds.clear();
+        }
     }
     nk_end(nkcontext);
 
@@ -150,6 +165,8 @@ void UpdateSystem(ecs::Commands& cmd, ecs::Querier, ecs::Resources resources, ec
         return;
     }
 
+    // process datas:
+
     netContext.state = NetState::Connected;
 
     char buf[4096] = {0};
@@ -159,7 +176,9 @@ void UpdateSystem(ecs::Commands& cmd, ecs::Querier, ecs::Resources resources, ec
         return;
     }
     if (len <= 0) {
-        netContext.clientSock->Close();
+        if (netContext.clientSock->Close() != 0) {
+            LOGE("close failed: ", net::GetLastError());
+        }
         netContext.state = NetState::ClientClosing;
 
         if (len < 0) {
@@ -175,26 +194,44 @@ void UpdateSystem(ecs::Commands& cmd, ecs::Querier, ecs::Resources resources, ec
     debugger::CmdType cmdType;
     debugger::GetBuf(ptr, &cmdType, sizeof(cmdType));
 
-    LOGI("recived: ", len, " - ", buf);
     switch (cmdType) {
         case debugger::CmdType::Line: {
             auto cmd = debugger::LineCmd::Deserialize(ptr);
+            if (cmdContext.cmds.empty()) {
+                transform.position.Set(-cmd.a.x, -cmd.a.y);
+            }
             cmdContext.cmds.push_back(cmd);
             LOGI("recived LineCmd, a: ", cmd.a, "\n\tb:", cmd.b,
                  "\n\tcolor:", cmd.color);
+            outputFile << "line" << std::endl;
+            cmd.a.Output2File(outputFile);
+            cmd.b.Output2File(outputFile);
+            outputFile << std::endl;
         } break;
         case debugger::CmdType::Point: {
             auto cmd = debugger::PointCmd::Deserialize(ptr);
+            if (cmdContext.cmds.empty()) {
+                transform.position.Set(-cmd.point.x, -cmd.point.y);
+            }
             cmdContext.cmds.push_back(cmd);
             LOGI("recived PointCmd, pt: ", cmd.point, "\t\ncolor: ", cmd.color);
+            outputFile << "point" << std::endl;
+            cmd.point.Output2File(outputFile);
+            outputFile << std::endl;
         } break;
         case debugger::CmdType::Plane: {
             auto cmd = debugger::PlaneCmd::Deserialize(ptr);
+            if (cmdContext.cmds.empty()) {
+                transform.position.Set(-cmd.vertices[0].x, -cmd.vertices[0].y);
+            }
             cmdContext.cmds.push_back(cmd);
             LOGI("recived PlaneCmd, pts:");
+            outputFile << "plane" << std::endl << cmd.vertices.size() << std::endl;
             for (auto& pt : cmd.vertices) {
                 LOGI("\n\t", pt);
+                pt.Output2File(outputFile);
             }
+            outputFile << std::endl;
             LOGI("\n\tColor: ", cmd.color);
         } break;
         default:
@@ -205,18 +242,25 @@ void UpdateSystem(ecs::Commands& cmd, ecs::Querier, ecs::Resources resources, ec
 constexpr int PointSize = 4 / 2;
 
 struct Visitor final {
-    Visitor(Renderer& renderer) : renderer_(renderer) {}
+    Visitor(Renderer& renderer, const Transform& transform, const math::Vector2& size)
+        : renderer_(renderer), transform_(transform), size_(size) {}
 
     void operator()(const debugger::PointCmd& cmd) {
         renderer_.SetDrawColor({cmd.color.r, cmd.color.g, cmd.color.b});
-        renderer_.FillRect(math::Rect{cmd.point.x - PointSize,
-                                      cmd.point.y - PointSize, PointSize * 2.0f,
-                                      PointSize * 2.0f});
+        auto center = (math::Vector2(cmd.point.x, cmd.point.y) + transform_.position) * transform_.scale + size_ / 2.0f;
+        renderer_.FillRect(
+            math::Rect{center.x - PointSize,
+                       center.y - PointSize,
+                       PointSize * 2.0f, PointSize * 2.0f});
     }
 
     void operator()(const debugger::LineCmd& cmd) {
         renderer_.SetDrawColor({cmd.color.r, cmd.color.g, cmd.color.b});
-        renderer_.DrawLine({cmd.a.x, cmd.a.y}, {cmd.b.x, cmd.b.y});
+        renderer_.DrawLine(
+            (math::Vector2{cmd.a.x, cmd.a.y} + transform_.position) *
+                transform_.scale + size_ / 2.0f,
+            (math::Vector2{cmd.b.x, cmd.b.y} + transform_.position) *
+                transform_.scale + size_ / 2.0f);
     }
 
     void operator()(const debugger::PlaneCmd& cmd) {
@@ -225,26 +269,62 @@ struct Visitor final {
             auto& pt = cmd.vertices[i];
             auto& nextPt = cmd.vertices[(i + 1) % cmd.vertices.size()];
 
-            renderer_.DrawLine({pt.x, pt.y}, {nextPt.x, nextPt.y});
+            renderer_.DrawLine(
+                (math::Vector2{pt.x, pt.y} + transform_.position) *
+                    transform_.scale + size_ / 2.0f,
+                (math::Vector2{nextPt.x, nextPt.y} + transform_.position) *
+                    transform_.scale + size_ / 2.0f);
         }
     }
 
     Renderer& renderer_;
+    const Transform& transform_;
+    const math::Vector2& size_;
 };
 
 void RenderSystem(ecs::Commands& cmd, ecs::Querier, ecs::Resources resources,
                   ecs::Events&) {
     auto& renderer = resources.Get<Renderer>();
     auto& cmdContext = resources.Get<CmdContext>();
+    auto& transform = resources.Get<Transform>();
+    auto& window = resources.Get<Window>();
 
     for (auto& cmd : cmdContext.cmds) {
-        std::visit(Visitor{renderer}, cmd);
+        std::visit(Visitor{renderer, transform, window.GetSize()}, cmd);
     }
 }
 
 void NuklearRenderSystem(ecs::Commands& cmd, ecs::Querier,
                          ecs::Resources resources, ecs::Events&) {
     nk_sdl_render(NK_ANTI_ALIASING_ON);
+}
+
+void EventHandleSystem(ecs::Commands& cmd, ecs::Querier, ecs::Resources resources,
+                  ecs::Events& events) {
+    auto& transform = resources.Get<Transform>();
+    auto& mouse = resources.Get<Mouse>();
+    auto& ctx = resources.Get<nk_context*>();
+
+    if (nk_item_is_any_active(ctx)) { return; }
+
+    auto wheelReader = events.Reader<SDL_MouseWheelEvent>();
+    if (wheelReader.Has()) {
+        auto& wheel = wheelReader.Read();
+        if (wheel.preciseY > 0) {
+            transform.scale *= 1.01;
+        } else if (wheel.preciseY < 0) {
+            transform.scale *= 0.99;
+        }
+    }
+
+    auto motionReader = events.Reader<SDL_MouseMotionEvent>();
+    if (motionReader.Has()) {
+        auto& motion = motionReader.Read();
+        if (mouse.LeftBtn().IsPressing()) {
+            transform.position.x += motion.xrel * 1.0 / transform.scale.x;
+            transform.position.y += motion.yrel * 1.0 / transform.scale.y;
+        }
+    }
 }
 
 class VisualDebugger : public App {
@@ -255,8 +335,9 @@ public:
             .AddStartupSystem(NuklearStartupSystem)
             .AddStartupSystem(StartupSystem)
             .AddSystem(UpdateSystem)
-            .AddSystem(NuklearRenderSystem)
+            .AddSystem(EventHandleSystem)
             .AddSystem(RenderSystem)
+            .AddSystem(NuklearRenderSystem)
             .AddSystem(ExitTrigger::DetectExitSystem)
             .SetResource<ExtraEventHandler>(ExtraEventHandler(
                 [&](const SDL_Event& event) {

@@ -243,7 +243,7 @@ public:
 
     int Bind();
     int Listen(int backlog = MAXCONN);
-    void Close();
+    int Close(int = SD_BOTH);
     Result<int, std::unique_ptr<Socket>> Accept(sockaddr&);
     bool Valid() const;
     int Connect();
@@ -371,7 +371,7 @@ Socket& Socket::operator=(Socket&& o) {
 }
 
 Socket::~Socket() {
-    Close();
+    closesocket(s_);
 }
 
 
@@ -379,12 +379,16 @@ bool Socket::Valid() const {
     return s_ != INVALID_SOCKET;
 }
 
-void Socket::Close() {
+int Socket::Close(int flag) {
     if (Valid()) {
-        shutdown(s_, SD_BOTH);
-        closesocket(s_);
-        s_ = INVALID_SOCKET;
+        shutdown(s_, flag);
+        int result = closesocket(s_);
+        if (result == 0) {
+            s_ = INVALID_SOCKET;
+        }
+        return result;
     }
+    return 0;
 }
 
 int Socket::Bind() {

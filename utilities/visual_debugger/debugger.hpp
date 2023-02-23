@@ -2,6 +2,8 @@
 
 #include "net.hpp"
 #include "draw_commands.hpp"
+#include <thread>
+#include <chrono>
 
 namespace debugger {
 
@@ -9,14 +11,14 @@ constexpr uint16_t PORT = 12757;
 
 class VisualDebugger {
 public:
-    static VisualDebugger& Instance() {
+    static std::unique_ptr<VisualDebugger>& Instance() {
         static std::unique_ptr<VisualDebugger> instance;
 
         if (!instance) {
             instance = std::make_unique<VisualDebugger>();
         }
 
-        return *instance;
+        return instance;
     }
 
     VisualDebugger() {
@@ -32,6 +34,15 @@ public:
 
         std::cout << "connecting..." << std::endl;
         socket_->Connect();
+    }
+
+    ~VisualDebugger() {
+        int code = 0;
+        if (socket_->Close(SD_SEND) != 0) {
+            std::cerr << "close socket failed: " << net::GetLastError() << std::endl;
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        net_.reset();
     }
 
     void SendPoint(const Vec3& pt, const Color& color) {
