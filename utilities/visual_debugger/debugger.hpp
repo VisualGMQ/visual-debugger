@@ -59,13 +59,14 @@ public:
         int iResult = socket_->Send((char*)buf, pointcmd.SerialSize());
     }
 
-    void SendLine(const Vec3& a, const Vec3& b, const Color& color) {
+    void SendLine(const Vec3& a, const Vec3& b, float bulge, const Color& color) {
         if (!socket_ || !socket_->Valid()) return;
 
         auto cmd = LineCmd();
         cmd.color = color;
         cmd.a = a;
         cmd.b = b;
+        cmd.bulge = bulge;
 
         uint8_t buf[1024] = {0};
 
@@ -74,12 +75,13 @@ public:
         int iResult = socket_->Send((char*)buf, cmd.SerialSize());
     }
 
-    void SendPlane(const std::vector<Vec3>& vertices, const Color& color) {
+    void SendPlane(const std::vector<Vec3>& vertices, const std::vector<float>& bulges, const Color& color) {
         if (!socket_ || !socket_->Valid()) return;
 
         auto cmd = PlaneCmd();
         cmd.color = color;
         cmd.vertices = vertices;
+        cmd.bulges = bulges;
 
         uint8_t buf[4096] = {0};
 

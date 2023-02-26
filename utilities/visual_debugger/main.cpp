@@ -202,11 +202,12 @@ void UpdateSystem(ecs::Commands& cmd, ecs::Querier, ecs::Resources resources, ec
             }
             cmdContext.cmds.push_back(cmd);
             LOGI("recived LineCmd, a: ", cmd.a, "\n\tb:", cmd.b,
+                "\n\tbulge:", cmd.bulge,
                  "\n\tcolor:", cmd.color);
             outputFile << "line" << std::endl;
             cmd.a.Output2File(outputFile);
             cmd.b.Output2File(outputFile);
-            outputFile << std::endl;
+            outputFile << " " << cmd.bulge << std::endl;
         } break;
         case debugger::CmdType::Point: {
             auto cmd = debugger::PointCmd::Deserialize(ptr);
@@ -221,6 +222,10 @@ void UpdateSystem(ecs::Commands& cmd, ecs::Querier, ecs::Resources resources, ec
         } break;
         case debugger::CmdType::Plane: {
             auto cmd = debugger::PlaneCmd::Deserialize(ptr);
+            if (cmd.vertices.empty() || cmd.bulges.empty()) {
+                LOGE("invalid plane, vertices or bulges are 0");
+                return;
+            }
             if (cmdContext.cmds.empty()) {
                 transform.position.Set(-cmd.vertices[0].x, -cmd.vertices[0].y);
             }
@@ -232,6 +237,13 @@ void UpdateSystem(ecs::Commands& cmd, ecs::Querier, ecs::Resources resources, ec
                 pt.Output2File(outputFile);
             }
             outputFile << std::endl;
+            outputFile << std::endl << cmd.bulges.size() << std::endl;
+            for (auto& bulge : cmd.bulges) {
+                LOGI("\n\t", bulge);
+                outputFile << bulge << " ";
+            }
+            outputFile << std::endl;
+
             LOGI("\n\tColor: ", cmd.color);
         } break;
         default:

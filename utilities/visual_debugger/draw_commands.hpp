@@ -17,14 +17,14 @@ Bytes:  1    4 4 4
 TotleBytes: 13
 
 Type:   Line
-Format: Type x1 y1 z2 x2 y2 z2
-Bytes:  1    4  4  4  4  4  4
-TotleBytes: 25
+Format: Type x1 y1 z2 x2 y2 z2 bulge
+Bytes:  1    4  4  4  4  4  4  4
+TotleBytes: 29
 
 Type:  Plane
-Format Type num [x y z]*
-Bytes: 1    8    4 4 4
-TotleBytes: 9 + n * (12)
+Format Type num [x y z]* [bulge]*
+Bytes: 1    8    4 4 4   4
+TotleBytes: 9 + n * (16)
 */
 
 using Uint8Ptr = uint8_t*;
@@ -120,10 +120,11 @@ inline std::ostream& operator<<(std::ostream& o, const Color& v) {
 
 struct LineCmd final {
     Vec3 a, b;
+    float bulge = 0;
     Color color; 
 
     static size_t SerialSize() {
-        return sizeof(CmdType) + Vec3::SerialSize() + Vec3::SerialSize() + Color::SerialSize();
+        return sizeof(CmdType) + Vec3::SerialSize() + Vec3::SerialSize() + Color::SerialSize() + sizeof(bulge);
     }
 
     static LineCmd Deserialize(Uint8Ptr& buf) {
@@ -131,6 +132,7 @@ struct LineCmd final {
 
         result.a = Vec3::Deserialize(buf);
         result.b = Vec3::Deserialize(buf);
+        GetBuf(buf, &result.bulge, sizeof(result.bulge));
         result.color = Color::Deserialize(buf);
 
         return result;
@@ -142,6 +144,7 @@ struct LineCmd final {
         PutBuf(buf, &type, sizeof(CmdType));
         a.Serialize(buf);
         b.Serialize(buf);
+        PutBuf(buf, &bulge, sizeof(bulge));
         color.Serialize(buf);
     }
 };
@@ -149,9 +152,10 @@ struct LineCmd final {
 struct PlaneCmd final {
     Color color;
     std::vector<Vec3> vertices;
+    std::vector<float> bulges;
 
     size_t SerialSize() const {
-        return sizeof(CmdType) + color.SerialSize() + sizeof(uint64_t) + vertices.size() * Vec3::SerialSize();
+        return sizeof(CmdType) + color.SerialSize() + sizeof(uint64_t) + vertices.size() * (Vec3::SerialSize() + sizeof(float));
     }
 
     static PlaneCmd Deserialize(Uint8Ptr& buf) {
@@ -159,9 +163,14 @@ struct PlaneCmd final {
         uint64_t count;
         GetBuf(buf, &count, sizeof(count));
         result.vertices.resize(count);
+        result.bulges.resize(count);
 
         for (int i = 0; i < count; i++) {
             result.vertices[i] = Vec3::Deserialize(buf);
+        }
+
+        for (int i = 0; i < count; i++) {
+            GetBuf(buf, &result.bulges[i], sizeof(float));
         }
 
         result.color = Color::Deserialize(buf);
@@ -177,6 +186,9 @@ struct PlaneCmd final {
         PutBuf(buf, &count, sizeof(count));
         for (auto& vertex : vertices) {
             vertex.Serialize(buf);
+        }
+        for (auto& bulge : bulges) {
+            PutBuf(buf, &bulge, sizeof(bulge));
         }
         color.Serialize(buf);
     }

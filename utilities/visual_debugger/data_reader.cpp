@@ -3,8 +3,8 @@
 #include <vector>
 
 using PointDealFun = std::function<void(const debugger::Vec3&)>;
-using LineDealFun = std::function<void(const debugger::Vec3&, const debugger::Vec3&)>;
-using PlaneDealFun = std::function<void(const std::vector<debugger::Vec3>&)>;
+using LineDealFun = std::function<void(const debugger::Vec3&, const debugger::Vec3&, float)>;
+using PlaneDealFun = std::function<void(const std::vector<debugger::Vec3>&, const std::vector<float>&)>;
 
 void ReadFromFile(const std::string filename, PointDealFun pt, LineDealFun line, PlaneDealFun plane) {
     std::ifstream file(filename);
@@ -17,7 +17,9 @@ void ReadFromFile(const std::string filename, PointDealFun pt, LineDealFun line,
         } else if (type == "line") {
             debugger::Vec3 v1 = debugger::Vec3::FromFile(file),
                            v2 = debugger::Vec3::FromFile(file);
-            line(v1, v2);
+            float bulge;
+            file >> bulge;
+            line(v1, v2, bulge);
         } else if (type == "plane") {
             int count;
             file >> count;
@@ -26,7 +28,13 @@ void ReadFromFile(const std::string filename, PointDealFun pt, LineDealFun line,
                 debugger::Vec3 v = debugger::Vec3::FromFile(file);
                 vertices.push_back(v);
             }
-            plane(vertices);
+            std::vector<float> bulges;
+            for (int i = 0; i < count; i++) {
+                float bulge;
+                file >> bulge;
+                bulges.push_back(bulge);
+            }
+            plane(vertices, bulges);
         }
     }
 }
@@ -35,7 +43,7 @@ int main(int argc, char** argv) {
     ReadFromFile("./debugger-log.txt", [](const debugger::Vec3& v){
         std::cout << v;
     },
-    [](const debugger::Vec3& v1, const debugger::Vec3& v2) {
+    [](const debugger::Vec3& v1, const debugger::Vec3& v2, float bulge) {
 
-    }, [](const std::vector<debugger::Vec3>&) {});
+    }, [](const std::vector<debugger::Vec3>&, const std::vector<float>& bulges) {});
 }
