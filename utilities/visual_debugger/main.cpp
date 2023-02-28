@@ -323,9 +323,9 @@ void EventHandleSystem(ecs::Commands& cmd, ecs::Querier, ecs::Resources resource
     if (wheelReader.Has()) {
         auto& wheel = wheelReader.Read();
         if (wheel.preciseY > 0) {
-            transform.scale *= 1.01;
+            transform.scale *= 1.2;
         } else if (wheel.preciseY < 0) {
-            transform.scale *= 0.99;
+            transform.scale *= 0.8;
         }
     }
 
