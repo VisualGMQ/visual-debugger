@@ -33,10 +33,13 @@ AttachCppCheck()
 
 # compile 3rdlibs
 add_subdirectory(3rdlibs/lua)
+add_subdirectory(3rdlibs/nuklear)
+add_subdirectory(3rdlibs/tinyfiledialogs)
 
-# build game
 
-set(GAME_NAME ${PROJECT_NAME})
+# build debugger
+
+set(DEBUGGER_NAME ${PROJECT_NAME})
 set(LOWLEVEL_NAME lowlevel)
 
 aux_source_directory(src/core CORE_SRC)
@@ -63,29 +66,23 @@ else()
     target_compile_definitions(${LOWLEVEL_NAME} PUBLIC GROGUE_PLATFORM_UNKNOWN)
 endif()
 
-aux_source_directory(src/game GAME_SRC)
+aux_source_directory(src/debugger GAME_SRC)
 
-add_executable(${GAME_NAME})
-target_sources(${GAME_NAME} PRIVATE ${GAME_SRC})
-target_link_libraries(${GAME_NAME} PRIVATE ${LOWLEVEL_NAME})
+add_executable(${DEBUGGER_NAME})
+target_sources(${DEBUGGER_NAME} PRIVATE ${GAME_SRC})
+target_link_libraries(${DEBUGGER_NAME} PRIVATE ${LOWLEVEL_NAME} nuklear tinyfiledialogs)
 
-CopyDLL(${GAME_NAME})
+CopyDLL(${DEBUGGER_NAME})
 
 # auto format
 option(AUTO_FORMAT "should auto-format before build using clang-format?" ON)
 mark_as_advanced(FORCE AUTO_FORMAT)
 if (AUTO_FORMAT)
     message("enable auto format")
-    add_custom_command(TARGET ${GAME_NAME} PRE_BUILD
+    add_custom_command(TARGET ${DEBUGGER_NAME} PRE_BUILD
                     COMMAND ${CMAKE_COMMAND} -P cmake/format.cmake
                     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
                     COMMENT "start format")
-endif()
-
-# utilities
-option(ENABLE_UTILITIES "enable build utilities" ON)
-if (ENABLE_UTILITIES)
-    add_subdirectory(utilities)
 endif()
 
 # unittest

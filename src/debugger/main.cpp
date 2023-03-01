@@ -8,9 +8,9 @@
 #include "nuklear.h"
 #include "nuklear_sdl_renderer.h"
 #include "app/app.hpp"
-#include "net.hpp"
+#include "debugger/net.hpp"
 #include <variant>
-#include "draw_commands.hpp"
+#include "debugger/draw_commands.hpp"
 
 enum class NetState {
     ClientClosing,

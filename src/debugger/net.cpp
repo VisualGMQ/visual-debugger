@@ -1,2 +1,2 @@
 #define NET_IMPLEMENTATION
-#include "net.hpp"
+#include "debugger/net.hpp"

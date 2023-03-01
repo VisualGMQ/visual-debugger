@@ -1,6 +1,0 @@
-aux_source_directory(./ TFD_SOURCE)
-add_library(tinyfiledialogs ${TFD_SOURCE})
-if (WIN32)
-    target_link_libraries(tinyfiledialogs PRIVATE comdlg32 ole32)
-endif()
-target_include_directories(tinyfiledialogs PUBLIC ./)

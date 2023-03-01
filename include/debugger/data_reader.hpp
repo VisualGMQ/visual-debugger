@@ -1,12 +1,14 @@
-#include "draw_commands.hpp"
+#pragma once
 #include <functional>
 #include <vector>
+#include <fstream>
+#include "draw_commands.hpp"
 
 using PointDealFun = std::function<void(const debugger::Vec3&)>;
 using LineDealFun = std::function<void(const debugger::Vec3&, const debugger::Vec3&, float)>;
 using PlaneDealFun = std::function<void(const std::vector<debugger::Vec3>&, const std::vector<float>&)>;
 
-void ReadFromFile(const std::string filename, PointDealFun pt, LineDealFun line, PlaneDealFun plane) {
+inline void ReadFromFile(const std::string filename, PointDealFun pt, LineDealFun line, PlaneDealFun plane) {
     std::ifstream file(filename);
     while (!file.eof()) {
         std::string type;
@@ -37,13 +39,4 @@ void ReadFromFile(const std::string filename, PointDealFun pt, LineDealFun line,
             plane(vertices, bulges);
         }
     }
-}
-
-int main(int argc, char** argv) {
-    ReadFromFile("./debugger-log.txt", [](const debugger::Vec3& v){
-        std::cout << v;
-    },
-    [](const debugger::Vec3& v1, const debugger::Vec3& v2, float bulge) {
-
-    }, [](const std::vector<debugger::Vec3>&, const std::vector<float>& bulges) {});
 }

@@ -1,5 +1,5 @@
 #define NET_IMPLEMENTATION
-#include "debugger.hpp"
+#include "debugger/debugger.hpp"
 
 int main() {
     auto& debugger = debugger::VisualDebugger::Instance();
