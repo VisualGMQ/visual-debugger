@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 project(
-    grogue
+    visual-debugger
     VERSION 0.1.0
     LANGUAGES CXX C
 )
@@ -35,6 +35,7 @@ AttachCppCheck()
 add_subdirectory(3rdlibs/lua)
 add_subdirectory(3rdlibs/nuklear)
 add_subdirectory(3rdlibs/tinyfiledialogs)
+add_subdirectory(3rdlibs/glad)
 
 
 # build debugger
@@ -47,7 +48,7 @@ aux_source_directory(src/app  APP_SRC)
 
 add_library(${LOWLEVEL_NAME} STATIC ${CORE_SRC} ${APP_SRC})
 target_include_directories(${LOWLEVEL_NAME} PUBLIC include)
-target_link_libraries(${LOWLEVEL_NAME} PUBLIC SDL2 SDL2_image SDL2_ttf SDL2_mixer lua)
+target_link_libraries(${LOWLEVEL_NAME} PUBLIC SDL2 SDL2_image SDL2_ttf SDL2_mixer lua glad nuklear tinyfiledialogs)
 target_compile_features(${LOWLEVEL_NAME} PUBLIC cxx_std_17)
 
 if (NOT ${is_mingw_backend})

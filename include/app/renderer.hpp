@@ -7,6 +7,8 @@
 #include "core/pch.hpp"
 #include "app/transform.hpp"
 #include "app/sprite.hpp"
+#include "glad/glad.h"
+#include "app/glhelper.hpp"
 
 class Image;
 class ImageManager;
@@ -24,18 +26,10 @@ public:
     Renderer& operator=(const Renderer&) = delete;
     Renderer& operator=(Renderer&&);
 
-    void SetDrawColor(const Color&);
-    Color GetDrawColor();
-
-    void DrawLine(const math::Vector2&, const math::Vector2&);
-    void DrawRect(const math::Rect&);
-    void FillRect(const math::Rect&);
-    void DrawText(FontHandle, const std::string& text, const Transform&);
-    void DrawSprite(SpriteBundle&);
-    void DrawCircle(const math::Vector2& center, float radius, float subsection = 20);
+    void DrawLine(const math::Vector3&, const math::Vector3&);
 
     void Present();
-    void Clear();
+    void Clear(const Color&);
 
     SDL_Renderer* Raw() const { return renderer_; }
 
@@ -43,6 +37,7 @@ private:
     SDL_Renderer* renderer_ = nullptr;
     FontManager* fontManager_ = nullptr;
     ImageManager* imageManager_ = nullptr;
+    Window& window_;
 
     // use Copy-And-Swap-Idiom:
     // https://stackoverflow.com/questions/3279543/what-is-the-copy-and-swap-idiom
