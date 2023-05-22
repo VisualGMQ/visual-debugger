@@ -9,8 +9,16 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_subdirectory(3rdlibs)
 
-aux_source_directory(src SRC)
-add_executable(debugger ${SRC})
-target_link_libraries(debugger PRIVATE glm glfw glad)
-target_include_directories(debugger PRIVATE include)
-target_compile_features(debugger PRIVATE cxx_std_17)
+aux_source_directory(src/lib SRC)
+add_library(dbglib STATIC ${SRC})
+target_link_libraries(dbglib PUBLIC glm glfw glad)
+target_include_directories(dbglib PUBLIC include)
+target_compile_features(dbglib PUBLIC cxx_std_17)
+
+aux_source_directory(src/debugger DBG_SRC)
+add_executable(debugger ${DBG_SRC})
+target_link_libraries(debugger PUBLIC dbglib)
+
+# unittest
+enable_testing()
+add_subdirectory(test)

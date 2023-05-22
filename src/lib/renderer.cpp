@@ -49,9 +49,6 @@ void Renderer::Start(const glm::vec3& color) {
 
     shader_->SetMat4("view", camera_->View());
     shader_->SetMat4("project", camera_->Projection());
-
-    LOGT("view = ", glm::to_string(glm::transpose(camera_->View())));
-    LOGT("prject = ", glm::to_string(glm::transpose(camera_->Projection())));
 }
 
 GLenum meshtype2gl(Mesh::Type type) {
@@ -65,8 +62,6 @@ GLenum meshtype2gl(Mesh::Type type) {
 void Renderer::Draw(const Mesh& mesh, const glm::mat4& model, const glm::vec3& color) {
     shader_->SetMat4("model", model);
     shader_->SetVec3("color", color);
-
-    LOGT("model = ", glm::to_string(glm::transpose(model)));
 
     arrayBuffer_->SetData((void*)mesh.vertices.data(), sizeof(Vertex) * mesh.vertices.size());
 

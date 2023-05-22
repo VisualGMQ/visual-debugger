@@ -18,3 +18,22 @@ inline std::optional<std::string> ReadWholeFile(const std::string& filename) {
     return content;
 }
 
+inline const uint8_t* FindSubStr(const uint8_t* str, size_t size1, const uint8_t* c, size_t size2) {
+    const uint8_t* ptr = str;
+    const uint8_t* cptr = c;
+
+    while (ptr < str + size1) {
+        const uint8_t* oldPtr = ptr;
+        while (ptr < str + size1 && cptr < c + size2 && *cptr == *ptr) {
+            ptr ++;
+            cptr ++;
+        }
+        if (cptr - c == size2) {
+            return oldPtr;
+        } else {
+            ptr = oldPtr + (cptr - c == 0 ? 1 : cptr - c);
+            cptr = c;
+        }
+    }
+    return nullptr;
+}

@@ -2,7 +2,7 @@
 
 #include "pch.hpp"
 
-struct Frustum {
+struct Frustum final {
     float near;
     float far;
     float fov;
