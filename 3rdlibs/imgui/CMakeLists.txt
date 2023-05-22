@@ -1,0 +1,5 @@
+aux_source_directory(./ IMGUI_SRC)
+aux_source_directory(./backends IMGUI_SRC)
+add_library(imgui STATIC ${IMGUI_SRC})
+target_link_libraries(imgui PUBLIC glfw)
+target_include_directories(imgui PUBLIC "./")

@@ -11,7 +11,7 @@ add_subdirectory(3rdlibs)
 
 aux_source_directory(src/lib SRC)
 add_library(dbglib STATIC ${SRC})
-target_link_libraries(dbglib PUBLIC glm glfw glad)
+target_link_libraries(dbglib PUBLIC glm glfw glad imgui)
 target_include_directories(dbglib PUBLIC include)
 target_compile_features(dbglib PUBLIC cxx_std_17)
 

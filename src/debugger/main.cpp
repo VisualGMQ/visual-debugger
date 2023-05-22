@@ -4,16 +4,26 @@
 #include <mutex>
 #include "netdata.hpp"
 #include "vertex.hpp"
+#include "imgui.h"
+#include "backends/imgui_impl_glfw.h"
+#include "backends/imgui_impl_opengl3.h"
+
 
 float gRotateY = 0;
 glm::vec3 gOrigin;
 float gScale = 1.0;
+bool gShowUI = true;
 
 void ErrorCallback(int error, const char* description) {
     LOGE("[GLFW]: ", error, " - ", description);
 }
 
 void CursorPositionCallback(GLFWwindow* window, double xpos, double ypos) {
+    ImGui_ImplGlfw_CursorPosCallback(window, xpos, ypos);
+
+    if (ImGui::GetIO().WantCaptureMouse || ImGui::IsWindowHovered()) {
+        return;
+    }
     static double oldX, oldY;
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
         gRotateY += (xpos - oldX) * 0.001;
@@ -28,12 +38,16 @@ void CursorPositionCallback(GLFWwindow* window, double xpos, double ypos) {
 }
 
 void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
-    LOGI("here");
+    ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
+
+    if (ImGui::GetIO().WantCaptureMouse) {
+        return;
+    }
+
     gScale += 0.01 * (yoffset > 0 ? 1.0 : -1.0);
     if (gScale < 0.1) {
         gScale = 0.1;
     }
-    LOGI("gScale = ", gScale);
 }
 
 struct RenderData {
@@ -59,13 +73,29 @@ int main() {
     }
 
     glfwMakeContextCurrent(window);
+    glfwSwapInterval(1); // Enable vsync
     if (gladLoadGL() == 0) {
         LOGF("[GLAD]: glad init failed!");
         return 2;
     }
 
+    // Setup Dear ImGui context
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+
+    // Setup Dear ImGui style
+    ImGui::StyleColorsDark();
+
+    // Setup Platform/Renderer backends
+    ImGui_ImplGlfw_InitForOpenGL(window, false);
+    ImGui_ImplOpenGL3_Init("#version 410");
+
     glfwSetCursorPosCallback(window, CursorPositionCallback);
     glfwSetScrollCallback(window, ScrollCallback);
+    glfwSetMouseButtonCallback(window, ImGui_ImplGlfw_MouseButtonCallback);
 
     Renderer::Init();
     auto& renderer = Renderer::Instance();
@@ -92,11 +122,15 @@ int main() {
         }
     });
 
+    bool show_demo_window = true;
+
     std::mutex m;
     while (!glfwWindowShouldClose(window)) {
+        glfwPollEvents();
+
         renderer.Start(glm::vec3(0.2, 0.2, 0.2));
 
-        std::lock_guard guard(m);
+        std::unique_lock lock(m);
         for (const auto& data : gDatas) {
             renderer.Draw(data.second.mesh, 
                             glm::rotate(
@@ -106,12 +140,33 @@ int main() {
                                 gRotateY, glm::vec3(0, 1, 0)),
                         data.second.color);
         }
+        lock.unlock();
 
-        glfwPollEvents();
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+
+        if (gShowUI) {
+            ImGui::Begin("ui", &gShowUI);
+            ImGui::Text("offset: (%f, %f, %f)", gOrigin.x, gOrigin.y, gOrigin.z);
+            ImGui::Text("y rotateion: %f", gRotateY);
+            ImGui::Text("scale: %f", gScale);
+            ImGui::End();
+        }
+
+        ImGui::Render();
+
+        int display_w, display_h;
+        glfwGetFramebufferSize(window, &display_w, &display_h);
+        glViewport(0, 0, display_w, display_h);
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         glfwSwapBuffers(window);
     }
 
     Renderer::Quit();
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
     glfwDestroyWindow(window);
     glfwTerminate();
 
