@@ -116,7 +116,7 @@ int main() {
         bool shouldQuit = false;
 
         while (!shouldQuit) {
-            // recv.TryAccept();
+            recv.TryAccept();
             auto packets = recv.RecvPacket();
             std::unique_lock guard(m, std::defer_lock);
             guard.lock();
@@ -136,6 +136,7 @@ int main() {
             l.unlock();
         }
     });
+    th.detach();
 
     bool show_demo_window = true;
     auto& frustum = renderer.GetCamera().GetFrustum();
@@ -221,8 +222,6 @@ int main() {
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         glfwSwapBuffers(window);
     }
-
-    th.join();
 
     Renderer::Quit();
     ImGui_ImplOpenGL3_Shutdown();
