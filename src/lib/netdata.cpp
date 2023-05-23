@@ -39,17 +39,28 @@ NetRecv::NetRecv(std::unique_ptr<net::Net>& net, uint32_t port) {
     socket_->Listen(1);
     LOGI("listening on ", port, "...");
 
-    auto client = socket_->Accept();
-    client_ = std::move(client.value);
-    LOGI("connected client");
-    if (!client_->Valid()) {
-        LOGI("client not valid");
+    TryAccept();
+}
+
+void NetRecv::TryAccept() {
+    if (!client_) {
+        auto client = socket_->Accept();
+        client_ = std::move(client.value);
+        LOGI("connected client");
+        if (!client_->Valid()) {
+            LOGI("client not valid");
+            client_ = nullptr;
+        }
     }
 }
 
 NetRecv::~NetRecv() {
-    client_->Close();
-    socket_->Close();
+    if (client_) {
+		client_->Close();
+    }
+    if (socket_) {
+		socket_->Close();
+    }
 }
 
 std::vector<Packet> NetRecv::RecvPacket() {
@@ -85,6 +96,7 @@ std::vector<Packet> NetRecv::RecvPacket() {
     }
 	if (result) {
 		auto packet = analyzePacket(cache_.data(), cache_.data() + cache_.size());
+        cache_.clear();
 		if (!packet) {
 			LOGE("analyze packet failed!");
 		} else {

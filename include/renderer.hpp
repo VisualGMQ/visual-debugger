@@ -19,6 +19,8 @@ public:
 
     void Start(const glm::vec3& color);
 
+    void SetLineWidth(int width) { GL_CALL(glLineWidth(width)); }
+
     void Draw(const Mesh& mesh, const glm::mat4& model, const glm::vec3& color);
 
 private:

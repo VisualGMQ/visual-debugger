@@ -35,6 +35,7 @@ public:
     NetRecv(std::unique_ptr<net::Net>& net, uint32_t port);
     ~NetRecv();
     std::vector<Packet> RecvPacket();
+    void TryAccept();
 
 private:
     net::Socket* socket_;

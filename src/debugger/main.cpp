@@ -2,8 +2,11 @@
 #include "renderer.hpp"
 #include <thread>
 #include <mutex>
+#include <iostream>
 #include "netdata.hpp"
 #include "vertex.hpp"
+#include "geom.hpp"
+#include "camera.hpp"
 #include "imgui.h"
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
@@ -13,6 +16,8 @@ float gRotateY = 0;
 glm::vec3 gOrigin;
 float gScale = 1.0;
 bool gShowUI = true;
+bool gQuitApp = false;
+std::mutex m;
 
 void ErrorCallback(int error, const char* description) {
     LOGE("[GLFW]: ", error, " - ", description);
@@ -53,6 +58,7 @@ void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
 struct RenderData {
     Mesh mesh;
     glm::vec3 color;
+    bool selected = false;
 };
 
 std::unordered_map<std::string, RenderData> gDatas;
@@ -67,7 +73,7 @@ int main() {
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-    GLFWwindow* window = glfwCreateWindow(1024, 720, "VisualDebugger", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(WindowWidth, WindowHeight, "VisualDebugger", NULL, NULL);
     if (!window) {
         LOGE("[GLFW]: create window failed");
     }
@@ -104,41 +110,88 @@ int main() {
     camera.Lookat(glm::vec3(0, 0, 0));
 
     std::thread th([&](){
-        std::mutex m;
         auto net = net::Init();
         NetRecv recv(net, 8999);
-        while (true) {
+
+        bool shouldQuit = false;
+
+        while (!shouldQuit) {
+            // recv.TryAccept();
             auto packets = recv.RecvPacket();
+            std::unique_lock guard(m, std::defer_lock);
+            guard.lock();
             for (const auto& packet : packets) {
-                LOGI("recv ", packet.data.name);
                 std::vector<Vertex> vertices;
                 for (const auto& pos : packet.data.positions) {
                     vertices.push_back(Vertex{pos});
                 }
                 Mesh mesh = Mesh::Create(packet.type, vertices);
-                std::lock_guard guard(m);
                 gDatas[packet.data.name] = RenderData{mesh, packet.data.color};
             }
+            guard.unlock();
+
+            std::unique_lock l(m, std::defer_lock);
+            l.lock();
+            shouldQuit = gQuitApp;
+            l.unlock();
         }
     });
 
     bool show_demo_window = true;
+    auto& frustum = renderer.GetCamera().GetFrustum();
 
-    std::mutex m;
-    while (!glfwWindowShouldClose(window)) {
+    while (!gQuitApp) {
+        std::unique_lock l(m, std::defer_lock);
+        l.lock();
+        gQuitApp = glfwWindowShouldClose(window);
+        l.unlock();
+
         glfwPollEvents();
+
+        double x, y;
+        glfwGetCursorPos(window, &x, &y);
+        float halfW = std::tan(frustum.fov) * frustum.Near();
+        float halfH = halfW / frustum.Aspect();
+        Linear ray = Linear::CreateFromLine(glm::vec3(0.0),
+                        glm::vec3((x / WindowWidth - 0.5) * 2.0 * halfW,
+                        ((WindowHeight - y) / WindowHeight - 0.5) * 2.0 * halfH,
+                        -frustum.Near()));
 
         renderer.Start(glm::vec3(0.2, 0.2, 0.2));
 
-        std::unique_lock lock(m);
-        for (const auto& data : gDatas) {
-            renderer.Draw(data.second.mesh, 
-                            glm::rotate(
-                                glm::scale(
-                                    glm::translate(glm::mat4(1.0), -gOrigin),
-                                    glm::vec3(gScale, gScale, gScale)),
-                                gRotateY, glm::vec3(0, 1, 0)),
-                        data.second.color);
+        std::unique_lock lock(m, std::defer_lock);
+        lock.lock();
+        for (auto& data : gDatas) {
+            auto model = glm::rotate(glm::scale(
+                    glm::translate(glm::mat4(1.0), -gOrigin),
+                    glm::vec3(gScale, gScale, gScale)),
+                gRotateY, glm::vec3(0, 1, 0));
+
+            /*
+            const auto& mesh = data.second.mesh;
+            for (int i = 0; i < mesh.vertices.size(); i++) {
+                const auto& pt1 = glm::vec3(camera.View() * model * glm::vec4(mesh.vertices[i].position, 1.0));
+                const auto& pt2 = glm::vec3(camera.View() * model * glm::vec4(mesh.vertices[(i + 1) % mesh.vertices.size()].position, 1.0));
+                auto seg = Linear::CreateFromSeg(pt1, pt2);
+                auto result = RaySegNearest(ray, seg);
+                if (result) {
+                    std::cout << "t1 = " << result.value().first << ", t2 = " << result.value().second << std::endl;
+                    auto p1 = ray.At(result.value().first);
+                    auto p2 = seg.At(result.value().second);
+                    std::cout << "lengt = " << (p1 - p2).length() << std::endl;
+                    if ((p1 - p2).length() <= 0.01) {
+                        data.second.selected = true;
+                    }
+                }
+            }
+            */
+
+            if (data.second.selected) {
+                renderer.SetLineWidth(5);
+            } else {
+                renderer.SetLineWidth(1);
+            }
+            renderer.Draw(data.second.mesh, model, data.second.color);
         }
         lock.unlock();
 
@@ -148,9 +201,15 @@ int main() {
 
         if (gShowUI) {
             ImGui::Begin("ui", &gShowUI);
+            if (ImGui::Button("clear all")) {
+                gDatas.clear();
+            }
             ImGui::Text("offset: (%f, %f, %f)", gOrigin.x, gOrigin.y, gOrigin.z);
             ImGui::Text("y rotateion: %f", gRotateY);
             ImGui::Text("scale: %f", gScale);
+            for (auto& [name, data] : gDatas) {
+                ImGui::Checkbox((name).c_str(), &data.selected);
+            }
             ImGui::End();
         }
 
@@ -163,13 +222,13 @@ int main() {
         glfwSwapBuffers(window);
     }
 
+    th.join();
+
     Renderer::Quit();
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
     glfwDestroyWindow(window);
     glfwTerminate();
-
-    th.join();
     return 0;
 }
