@@ -17,15 +17,17 @@ NetSender::~NetSender() {
 
 void NetSender::SendPacket(const Packet& packet) {
     auto buf = packet.Serialize();
-    if (socket_->Send("BEG", 3) <= 0) {
-        LOGI("connect lost");
-    }
+    buf.insert(buf.begin(), {'B', 'E', 'G'});
+    buf.insert(buf.end(), {'E', 'N', 'D'});
+    // if (socket_->Send("BEG", 3) <= 0) {
+    //     LOGI("connect lost");
+    // }
     if (socket_->Send((char*)buf.data(), buf.size()) <= 0) {
         LOGI("connect lost");
     }
-    if (socket_->Send("END", 3) <= 0) {
-        LOGI("connect lost");
-    }
+    // if (socket_->Send("END", 3) <= 0) {
+    //     LOGI("connect lost");
+    // }
 }
 
 NetRecv::NetRecv(std::unique_ptr<net::Net>& net, uint32_t port) {
@@ -68,9 +70,8 @@ std::vector<Packet> NetRecv::RecvPacket() {
         return {};
     }
 
-    uint8_t buf[1024] = {0};
+    uint8_t buf[4096] = {0};
     int len = client_->Recv((char*)buf, sizeof(buf));
-    LOGI("len = ", len);
 
     if (len <= 0) {
         LOGI("client closed");
@@ -84,9 +85,13 @@ std::vector<Packet> NetRecv::RecvPacket() {
     while (nextPtr < buf + len) {
         if (result) {
             auto packet = analyzePacket(cache_.data(), cache_.data() + cache_.size());
+            cache_.clear();
             if (!packet) {
                 LOGE("analyze packet failed!");
             } else {
+                if (packet.value().data.name.empty()) {
+                    LOGT("here");
+                }
                 packets.push_back(packet.value());
             }
         }
@@ -100,6 +105,9 @@ std::vector<Packet> NetRecv::RecvPacket() {
 		if (!packet) {
 			LOGE("analyze packet failed!");
 		} else {
+                if (packet.value().data.name.empty()) {
+                    LOGT("here");
+                }
 			packets.push_back(packet.value());
 		}
 	}
@@ -134,7 +142,10 @@ std::pair<bool, const uint8_t*> NetRecv::splitOnePacket(const uint8_t* beg, cons
             cache_.insert(cache_.end(), begPtr + 3, endPtr);
             return {true, endPtr + 3};
         } else {
-            cache_.insert(cache_.end(), beg, begPtr);
+            if (begPtr - endPtr != 3) {
+                LOGE("invalid data between END and BEG");
+            }
+            cache_.insert(cache_.end(), beg, endPtr);
             return {true, begPtr};
         }
     }
@@ -142,6 +153,13 @@ std::pair<bool, const uint8_t*> NetRecv::splitOnePacket(const uint8_t* beg, cons
 
 
 std::optional<Packet> NetRecv::analyzePacket(const uint8_t* beg, const uint8_t* end) {
+    if (end - beg <= 3) {
+        LOGE("packet data not enought!");
+        return std::nullopt;
+    }
+    if (beg[0] == 'B' && beg[1] == 'E' && beg[2] == 'G') {
+        return Packet::Deserialize(beg + 3, end);
+    }
     return Packet::Deserialize(beg, end);
 }
 

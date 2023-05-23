@@ -5,9 +5,10 @@
 
 struct Mesh final {
     enum Type: uint8_t {
-        Triangles,
-        Lines,
-        LineLoop,
+        Triangles = 0,
+        Lines = 1,
+        LineLoop = 2,
+        Points = 3,
     };
 
     std::vector<Vertex> vertices;

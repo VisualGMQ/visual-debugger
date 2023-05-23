@@ -57,6 +57,7 @@ GLenum meshtype2gl(Mesh::Type type) {
         case Mesh::Type::Triangles: return GL_TRIANGLES;
         case Mesh::Type::Lines : return GL_LINES;
         case Mesh::Type::LineLoop : return GL_LINE_LOOP;
+        case Mesh::Type::Points: return GL_POINTS;
     }
 }
 
@@ -66,6 +67,11 @@ void Renderer::Draw(const Mesh& mesh, const glm::mat4& model, const glm::vec3& c
 
     arrayBuffer_->SetData((void*)mesh.vertices.data(), sizeof(Vertex) * mesh.vertices.size());
 
+    if (mesh.type == Mesh::Type::Points) {
+        GL_CALL(glPointSize(5));
+    } else {
+        GL_CALL(glPointSize(1));
+    }
     if (mesh.indices) {
         indicesBuffer_->SetData((void*)mesh.indices.value().data(), mesh.indices.value().size() * sizeof(uint32_t));
         glDrawElements(meshtype2gl(mesh.type), mesh.indices.value().size(), GL_UNSIGNED_INT, 0);

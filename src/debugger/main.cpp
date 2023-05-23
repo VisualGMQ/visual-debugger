@@ -31,7 +31,7 @@ void CursorPositionCallback(GLFWwindow* window, double xpos, double ypos) {
     }
     static double oldX, oldY;
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-        gRotateY += (xpos - oldX) * 0.001;
+        gRotateY -= (xpos - oldX) * 0.001;
     }
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
         gOrigin.x -= (xpos - oldX) * 0.01;
@@ -63,6 +63,14 @@ struct RenderData {
 
 std::unordered_map<std::string, RenderData> gDatas;
 
+void ImGui_ImplGlfw_SetClipbord(void*, const char* text) {
+    glfwSetClipboardString(nullptr, text);
+}
+
+const char* ImGui_ImplGlfw_GetClipbord(void*) {
+    return glfwGetClipboardString(nullptr);
+}
+
 int main() {
     if (!glfwInit()) {
         LOGF("[APP]: glfw init failed");
@@ -91,6 +99,8 @@ int main() {
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+    io.SetClipboardTextFn = ImGui_ImplGlfw_SetClipbord;
+    io.GetClipboardTextFn = ImGui_ImplGlfw_GetClipbord;
 
     // Setup Dear ImGui style
     ImGui::StyleColorsDark();
@@ -192,7 +202,11 @@ int main() {
             } else {
                 renderer.SetLineWidth(1);
             }
-            renderer.Draw(data.second.mesh, model, data.second.color);
+            auto color = data.second.color;
+            if (data.second.mesh.type == Mesh::Type::Points && data.second.selected) {
+                color = glm::vec3(1.0, 1.0, 1.0) - color;
+            }
+            renderer.Draw(data.second.mesh, model, color);
         }
         lock.unlock();
 
@@ -209,7 +223,18 @@ int main() {
             ImGui::Text("y rotateion: %f", gRotateY);
             ImGui::Text("scale: %f", gScale);
             for (auto& [name, data] : gDatas) {
-                ImGui::Checkbox((name).c_str(), &data.selected);
+                ImGui::Checkbox(("##" + name).c_str(), &data.selected);
+                ImGui::SameLine();
+                if (ImGui::CollapsingHeader(name.c_str())) {
+                    for (int i = 0; i < data.mesh.vertices.size(); i++) {
+                        const auto& vertex = data.mesh.vertices[i];
+                        char buf[1024] = {0};
+                        snprintf(buf, sizeof(buf), "[%d]: (%f, %f, %f)", i, vertex.position.x, vertex.position.y, vertex.position.z); 
+                        if (ImGui::Button(buf)) {
+                            glfwSetClipboardString(window, buf);
+                        }
+                    }
+                }
             }
             ImGui::End();
         }
