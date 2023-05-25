@@ -17,17 +17,15 @@ NetSender::~NetSender() {
 
 void NetSender::SendPacket(const Packet& packet) {
     auto buf = packet.Serialize();
-    buf.insert(buf.begin(), {'B', 'E', 'G'});
-    buf.insert(buf.end(), {'E', 'N', 'D'});
-    // if (socket_->Send("BEG", 3) <= 0) {
-    //     LOGI("connect lost");
-    // }
+    if (socket_->Send("BEG", 3) <= 0) {
+        LOGI("connect lost");
+    }
     if (socket_->Send((char*)buf.data(), buf.size()) <= 0) {
         LOGI("connect lost");
     }
-    // if (socket_->Send("END", 3) <= 0) {
-    //     LOGI("connect lost");
-    // }
+    if (socket_->Send("END", 3) <= 0) {
+        LOGI("connect lost");
+    }
 }
 
 NetRecv::NetRecv(std::unique_ptr<net::Net>& net, uint32_t port) {
@@ -160,7 +158,14 @@ std::optional<Packet> NetRecv::analyzePacket(const uint8_t* beg, const uint8_t* 
     if (beg[0] == 'B' && beg[1] == 'E' && beg[2] == 'G') {
         return Packet::Deserialize(beg + 3, end);
     }
-    return Packet::Deserialize(beg, end);
+    auto packet = Packet::Deserialize(beg, end);
+    if (packet) {
+        for (auto& vertex : packet.value().data.positions) {
+            std::swap(vertex.y, vertex.z);
+        }
+    }
+
+    return packet;
 }
 
 std::vector<uint8_t> Packet::Serialize() const {

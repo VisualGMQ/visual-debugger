@@ -13,6 +13,7 @@
 
 
 float gRotateY = 0;
+float gRotateX = 0;
 glm::vec3 gOrigin;
 float gScale = 1.0;
 bool gShowUI = true;
@@ -32,10 +33,18 @@ void CursorPositionCallback(GLFWwindow* window, double xpos, double ypos) {
     static double oldX, oldY;
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
         gRotateY -= (xpos - oldX) * 0.001;
+        gRotateX -= (ypos - oldY) * 0.001;
     }
+
+    auto model = glm::rotate(glm::mat4(1.0), -gRotateX, glm::vec3(1.0, 0, 0 )) *
+                glm::rotate(glm::mat4(1.0), -gRotateY, glm::vec3(0.0, 1.0, 0.0));
+
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
-        gOrigin.x -= (xpos - oldX) * 0.01;
-        gOrigin.y += (ypos - oldY) * 0.01;
+        gOrigin -= float((xpos - oldX) * 0.01) / gScale * glm::vec3(model * glm::vec4(1, 0, 0, 1));
+        gOrigin -= float((ypos - oldY) * 0.01) / gScale * glm::vec3(model * glm::vec4(0, 0, 1, 1));
+    }
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS) {
+        gOrigin.y += float((ypos - oldY) * 0.01) / gScale;
     }
 
     oldX = xpos;
@@ -49,9 +58,13 @@ void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
         return;
     }
 
-    gScale += 0.01 * (yoffset > 0 ? 1.0 : -1.0);
-    if (gScale < 0.1) {
-        gScale = 0.1;
+    if (yoffset > 0) {
+        gScale /= 0.9;
+    } else {
+        gScale *= 0.9;
+    }
+    if (gScale < 0.0001) {
+        gScale = 0.0001;
     }
 }
 
@@ -148,9 +161,20 @@ int main() {
     });
     th.detach();
 
+    std::vector<Vertex> vertices;
+    for (int x = -20; x <= 20; x++) {
+        vertices.push_back(Vertex{glm::vec3(x, 0, -20)});
+        vertices.push_back(Vertex{glm::vec3(x, 0, 20)});
+    }
+    for (int z = -20; z <= 20; z++) {
+        vertices.push_back(Vertex{glm::vec3(-20, 0, z)});
+        vertices.push_back(Vertex{glm::vec3(20, 0, z)});
+    }
+    auto gridMesh = Mesh::Create(Mesh::Type::Lines, vertices);
+
     bool show_demo_window = true;
     auto& frustum = renderer.GetCamera().GetFrustum();
-
+    
     while (!gQuitApp) {
         std::unique_lock l(m, std::defer_lock);
         l.lock();
@@ -169,15 +193,16 @@ int main() {
                         -frustum.Near()));
 
         renderer.Start(glm::vec3(0.2, 0.2, 0.2));
+        auto model = glm::rotate(glm::mat4(1.0), gRotateX, glm::vec3(1, 0, 0 )) *
+                    glm::rotate(glm::mat4(1.0), gRotateY, glm::vec3(0.0, 1.0, 0.0)) *
+                    glm::scale(glm::mat4(1.0), glm::vec3(gScale, gScale, gScale)) *
+                    glm::translate(glm::mat4(1.0), -gOrigin);
+        renderer.SetLineWidth(1);
+        renderer.Draw(gridMesh, model, glm::vec3(0.4, 0.4, 0.4));
 
         std::unique_lock lock(m, std::defer_lock);
         lock.lock();
         for (auto& data : gDatas) {
-            auto model = glm::rotate(glm::scale(
-                    glm::translate(glm::mat4(1.0), -gOrigin),
-                    glm::vec3(gScale, gScale, gScale)),
-                gRotateY, glm::vec3(0, 1, 0));
-
             /*
             const auto& mesh = data.second.mesh;
             for (int i = 0; i < mesh.vertices.size(); i++) {
@@ -214,16 +239,22 @@ int main() {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+        gShowUI = true;
         if (gShowUI) {
             ImGui::Begin("ui", &gShowUI);
             if (ImGui::Button("clear all")) {
                 gDatas.clear();
             }
             ImGui::Text("offset: (%f, %f, %f)", gOrigin.x, gOrigin.y, gOrigin.z);
+            ImGui::Text("x rotateion: %f", gRotateX);
             ImGui::Text("y rotateion: %f", gRotateY);
             ImGui::Text("scale: %f", gScale);
             for (auto& [name, data] : gDatas) {
                 ImGui::Checkbox(("##" + name).c_str(), &data.selected);
+                ImGui::SameLine();
+                if (ImGui::Button(("G##" + name).c_str())) {
+                    gOrigin = data.mesh.vertices[0].position;
+                }
                 ImGui::SameLine();
                 if (ImGui::CollapsingHeader(name.c_str())) {
                     for (int i = 0; i < data.mesh.vertices.size(); i++) {

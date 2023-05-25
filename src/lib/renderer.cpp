@@ -20,7 +20,7 @@ Renderer::Renderer() {
     GL_CALL(glEnable(GL_LINE_SMOOTH));
 
     camera_ = std::make_unique<Camera>(Camera::CreatePerspective(Frustum{
-        0.0001f, 100000.0f, glm::radians(45.0f), WindowWidth / float(WindowHeight),
+        0.00001f, 100000.0f, glm::radians(45.0f), WindowWidth / float(WindowHeight),
     }));
 
     shader_ = std::make_unique<Shader>(
