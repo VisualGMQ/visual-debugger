@@ -11,6 +11,8 @@
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
 
+constexpr uint32_t PORT = 8999;
+
 
 float gRotateY = 0;
 float gRotateX = 0;
@@ -72,9 +74,12 @@ struct RenderData {
     Mesh mesh;
     glm::vec3 color;
     bool selected = false;
+    
+    std::vector<RenderData> childrens;
 };
 
 std::unordered_map<std::string, RenderData> gDatas;
+std::vector<std::string> gDataNames;
 
 void ImGui_ImplGlfw_SetClipbord(void*, const char* text) {
     glfwSetClipboardString(nullptr, text);
@@ -82,6 +87,37 @@ void ImGui_ImplGlfw_SetClipbord(void*, const char* text) {
 
 const char* ImGui_ImplGlfw_GetClipbord(void*) {
     return glfwGetClipboardString(nullptr);
+}
+
+void RunThread(std::unique_ptr<net::Socket>&& client) {
+    client->SetNonblock(false);
+    NetRecv recv(std::move(client));
+
+    bool shouldQuit = false;
+
+    while (!shouldQuit) {
+        auto packets = recv.RecvPacket();
+        std::unique_lock guard(m, std::defer_lock);
+        guard.lock();
+        for (const auto& packet : packets) {
+            std::vector<Vertex> vertices;
+            for (const auto& pos : packet.data.positions) {
+                vertices.push_back(Vertex{pos});
+            }
+            Mesh mesh = Mesh::Create(packet.type, vertices);
+            if (auto it = gDatas.find(packet.data.name); it == gDatas.end()) {
+                gDataNames.push_back(packet.data.name);
+            }
+            gDatas[packet.data.name] = RenderData{mesh, packet.data.color};
+        }
+        guard.unlock();
+
+        std::unique_lock l(m, std::defer_lock);
+        l.lock();
+        shouldQuit = gQuitApp;
+        l.unlock();
+    }
+
 }
 
 int main() {
@@ -132,35 +168,6 @@ int main() {
     camera.MoveTo(glm::vec3(0, 5, 5));
     camera.Lookat(glm::vec3(0, 0, 0));
 
-    std::thread th([&](){
-        auto net = net::Init();
-        NetRecv recv(net, 8999);
-
-        bool shouldQuit = false;
-
-        while (!shouldQuit) {
-            recv.TryAccept();
-            auto packets = recv.RecvPacket();
-            std::unique_lock guard(m, std::defer_lock);
-            guard.lock();
-            for (const auto& packet : packets) {
-                std::vector<Vertex> vertices;
-                for (const auto& pos : packet.data.positions) {
-                    vertices.push_back(Vertex{pos});
-                }
-                Mesh mesh = Mesh::Create(packet.type, vertices);
-                gDatas[packet.data.name] = RenderData{mesh, packet.data.color};
-            }
-            guard.unlock();
-
-            std::unique_lock l(m, std::defer_lock);
-            l.lock();
-            shouldQuit = gQuitApp;
-            l.unlock();
-        }
-    });
-    th.detach();
-
     std::vector<Vertex> vertices;
     for (int x = -20; x <= 20; x++) {
         vertices.push_back(Vertex{glm::vec3(x, 0, -20)});
@@ -174,8 +181,39 @@ int main() {
 
     bool show_demo_window = true;
     auto& frustum = renderer.GetCamera().GetFrustum();
-    
+
+    // init net
+    auto net = net::Init();
+
+    // create socket
+    auto result = net::AddrInfoBuilder::CreateTCP("localhost", PORT).Build();
+    if (result.result != 0) {
+        LOGE("create tcp on localhost:", PORT, " failed!");
+    }
+
+    auto socket = net->CreateSocket(result.value, true);
+    socket->Bind();
+    socket->Listen(2);
+    LOGI("listening on ", PORT, "...");
+   
     while (!gQuitApp) {
+        auto client = socket->Accept();
+        if (!client.value) {
+            if (client.result != WSAEWOULDBLOCK) {
+                std::cerr << "accept failed:" << net::Error2Str(client.result) << std::endl;
+            }
+        } else {
+            LOGI("connected client");
+            if (!client.value->Valid()) {
+                LOGI("client not valid");
+                client.value = nullptr;
+            } else {
+                std::thread th(RunThread, std::move(client.value));
+                th.detach();
+            }
+        }
+        
+ 
         std::unique_lock l(m, std::defer_lock);
         l.lock();
         gQuitApp = glfwWindowShouldClose(window);
@@ -202,7 +240,10 @@ int main() {
 
         std::unique_lock lock(m, std::defer_lock);
         lock.lock();
-        for (auto& data : gDatas) {
+        for (const auto& name : gDataNames) {
+            if (auto it = gDatas.find(name); it == gDatas.end()) {
+                continue;
+            }
             /*
             const auto& mesh = data.second.mesh;
             for (int i = 0; i < mesh.vertices.size(); i++) {
@@ -222,16 +263,17 @@ int main() {
             }
             */
 
-            if (data.second.selected) {
+            auto& data = gDatas[name];
+            if (data.selected) {
                 renderer.SetLineWidth(5);
             } else {
                 renderer.SetLineWidth(1);
             }
-            auto color = data.second.color;
-            if (data.second.mesh.type == Mesh::Type::Points && data.second.selected) {
+            auto color = data.color;
+            if (data.mesh.type == Mesh::Type::Points && data.selected) {
                 color = glm::vec3(1.0, 1.0, 1.0) - color;
             }
-            renderer.Draw(data.second.mesh, model, color);
+            renderer.Draw(data.mesh, model, color);
         }
         lock.unlock();
 
@@ -249,7 +291,11 @@ int main() {
             ImGui::Text("x rotateion: %f", gRotateX);
             ImGui::Text("y rotateion: %f", gRotateY);
             ImGui::Text("scale: %f", gScale);
-            for (auto& [name, data] : gDatas) {
+            for (const auto& name : gDataNames) {
+                if (auto it = gDatas.find(name); it == gDatas.end()) {
+                    continue;
+                }
+                auto& data = gDatas[name];
                 ImGui::Checkbox(("##" + name).c_str(), &data.selected);
                 ImGui::SameLine();
                 if (ImGui::Button(("G##" + name).c_str())) {
@@ -279,6 +325,7 @@ int main() {
         glfwSwapBuffers(window);
     }
 
+    socket->Close();
     Renderer::Quit();
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();

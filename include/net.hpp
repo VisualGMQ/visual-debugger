@@ -269,10 +269,17 @@ private:
 class Socket final {
 public:
     Socket(SOCKET s) : s_(s) {}
-    Socket(const AddrInfo &addr) : addr_(&addr) {
+    Socket(const AddrInfo &addr, bool nonBlock) : addr_(&addr) {
         s_ = socket(addr.info.ai_family, addr.info.ai_socktype, addr.info.ai_protocol);
         if (s_ == INVALID_SOCKET) {
             std::cerr << "socket create failed" << GetLastError() << std::endl;
+        } else {
+            if (nonBlock) {
+                unsigned long ul = 1;
+                if (int result = ioctlsocket(s_, FIONBIO, (unsigned long*)&ul); result != 0) {
+                    std::cerr << "set socket non-block failed: " << Error2Str(result) << std::endl;
+                }
+            }
         }
     }
     Socket(Socket&& o) { swap(*this, o); }
@@ -296,6 +303,13 @@ public:
         return listen(s_, backlog);
     }
 
+    void SetNonblock(bool nonBlock) {
+        unsigned long mode = nonBlock ? 1 : 0;
+        if (ioctlsocket(s_, FIONBIO, &mode) == SOCKET_ERROR) {
+            std::cerr << "set non-block io failed:" << Error2Str(WSAGetLastError()) << std::endl;
+        }
+    }
+
     void Close() {
         if (Valid()) {
             closesocket(s_);
@@ -308,7 +322,10 @@ public:
         if (clientSocket == INVALID_SOCKET)
         {
             int result = WSAGetLastError();
-            std::cerr << "accept socket failed" << Error2Str(result) << std::endl;
+            if (result != WSAEWOULDBLOCK) {
+                std::cerr << "accept socket failed: " << Error2Str(result) << std::endl;
+            }
+            return Result<int, std::unique_ptr<Socket>>(result, nullptr);
         }
 
         return Result<int, std::unique_ptr<Socket>>(0, std::make_unique<Socket>(clientSocket));
@@ -321,8 +338,24 @@ public:
         return connect(s_, addr_->info.ai_addr, addr_->info.ai_addrlen);
     }
 
-    int Recv(char *buf, size_t size) { return recv(s_, buf, size, 0); }
-    int Send(char *buf, size_t size) { return send(s_, buf, size, 0); }
+    Result<int, int> Recv(char *buf, size_t size) {
+        int len = recv(s_, buf, size, 0);
+        if (len <= 0) {
+            return Result<int, int>(WSAGetLastError(), len);
+        } else {
+            return Result<int, int>(0, len);
+        }
+    }
+
+    Result<int, int> Send(char *buf, size_t size) {
+        int len = send(s_, buf, size, 0);
+        if (len <= 0) {
+            return Result<int, int>(WSAGetLastError(), len);
+        } else {
+            return Result<int, int>(0, len);
+        }
+
+    }
 
     template <typename T>
     int Recv(const T &buf) {
@@ -357,8 +390,8 @@ public:
         WSACleanup();
     }
 
-    Socket *CreateSocket(const AddrInfo &addr) {
-        sockets_.push_back(std::make_unique<Socket>(addr));
+    Socket *CreateSocket(const AddrInfo &addr, bool nonBlock = false) {
+        sockets_.push_back(std::make_unique<Socket>(addr, nonBlock));
         return sockets_.back().get();
     }
 

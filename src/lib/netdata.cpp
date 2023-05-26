@@ -17,49 +17,20 @@ NetSender::~NetSender() {
 
 void NetSender::SendPacket(const Packet& packet) {
     auto buf = packet.Serialize();
-    if (socket_->Send("BEG", 3) <= 0) {
-        LOGI("connect lost");
+    if (auto result = socket_->Send("BEG", 3); result.value <= 0) {
+        LOGI("connect lost: ", net::Error2Str(result.result));
     }
-    if (socket_->Send((char*)buf.data(), buf.size()) <= 0) {
-        LOGI("connect lost");
+    if (auto result = socket_->Send((char*)buf.data(), buf.size()); result.value <= 0) {
+        LOGI("connect lost: ", net::Error2Str(result.result));
     }
-    if (socket_->Send("END", 3) <= 0) {
-        LOGI("connect lost");
-    }
-}
-
-NetRecv::NetRecv(std::unique_ptr<net::Net>& net, uint32_t port) {
-    auto result = net::AddrInfoBuilder::CreateTCP("localhost", port).Build();
-    if (result.result != 0) {
-        LOGE("create tcp on localhost:", port, " failed!");
-    }
-
-    socket_ = net->CreateSocket(result.value);
-    socket_->Bind();
-    socket_->Listen(1);
-    LOGI("listening on ", port, "...");
-
-    TryAccept();
-}
-
-void NetRecv::TryAccept() {
-    if (!client_) {
-        auto client = socket_->Accept();
-        client_ = std::move(client.value);
-        LOGI("connected client");
-        if (!client_->Valid()) {
-            LOGI("client not valid");
-            client_ = nullptr;
-        }
+    if (auto result = socket_->Send("END", 3); result.value <= 0) {
+        LOGI("connect lost: ", net::Error2Str(result.result));
     }
 }
 
 NetRecv::~NetRecv() {
     if (client_) {
 		client_->Close();
-    }
-    if (socket_) {
-		socket_->Close();
     }
 }
 
@@ -69,14 +40,16 @@ std::vector<Packet> NetRecv::RecvPacket() {
     }
 
     uint8_t buf[4096] = {0};
-    int len = client_->Recv((char*)buf, sizeof(buf));
+    auto recvResult = client_->Recv((char*)buf, sizeof(buf));
 
-    if (len <= 0) {
-        LOGI("client closed");
+    if (recvResult.value<= 0) {
+        LOGI("client closed: ", net::Error2Str(recvResult.result));
         client_->Close();
         client_ = nullptr;
         return {};
     }
+
+    int len = recvResult.value;
 
     std::vector<Packet> packets;
     auto [result, nextPtr] = splitOnePacket(buf, buf + len);

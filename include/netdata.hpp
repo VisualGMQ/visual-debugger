@@ -32,13 +32,11 @@ private:
 
 class NetRecv final {
 public:
-    NetRecv(std::unique_ptr<net::Net>& net, uint32_t port);
+    NetRecv(std::unique_ptr<net::Socket>&& client): client_(std::move(client)) { }
     ~NetRecv();
     std::vector<Packet> RecvPacket();
-    void TryAccept();
 
 private:
-    net::Socket* socket_;
     std::vector<uint8_t> cache_;
     std::unique_ptr<net::Socket> client_;
 
