@@ -348,13 +348,16 @@ public:
     }
 
     Result<int, int> Send(char *buf, size_t size) {
-        int len = send(s_, buf, size, 0);
-        if (len <= 0) {
-            return Result<int, int>(WSAGetLastError(), len);
-        } else {
-            return Result<int, int>(0, len);
-        }
-
+        char* last = buf;
+        do {
+            int len = send(s_, last, size - (buf - last), 0);
+            if (len <= 0) {
+                return Result<int, int>(WSAGetLastError(), len);
+            } else {
+                last = last + len;
+            }
+        } while (last < buf);
+        return Result<int, int>(0, size);
     }
 
     template <typename T>

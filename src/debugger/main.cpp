@@ -189,11 +189,18 @@ int main() {
     auto result = net::AddrInfoBuilder::CreateTCP("localhost", PORT).Build();
     if (result.result != 0) {
         LOGE("create tcp on localhost:", PORT, " failed!");
+        return 1;
     }
 
     auto socket = net->CreateSocket(result.value, true);
-    socket->Bind();
-    socket->Listen(2);
+    if (socket->Bind() == SOCKET_ERROR) {
+        LOGT("bind failed: ", net::Error2Str(WSAGetLastError()));
+        return 1;
+    }
+    if (socket->Listen(2) != 0) {
+        LOGF("listen failed: ", net::Error2Str(WSAGetLastError()));
+        return 1;
+    }
     LOGI("listening on ", PORT, "...");
    
     while (!gQuitApp) {

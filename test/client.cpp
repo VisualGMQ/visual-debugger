@@ -33,5 +33,7 @@ int main() {
         sender.SendPacket(packet2);
     }
 
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+
     return 0;
 }
