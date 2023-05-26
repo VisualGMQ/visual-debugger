@@ -296,7 +296,7 @@ public:
     Socket& operator=(const Socket&) = delete;
 
     int Socket::Bind() {
-        return bind(s_, addr_->info.ai_addr, (int)addr_->info.ai_addrlen);
+        return ::bind(s_, addr_->info.ai_addr, (int)addr_->info.ai_addrlen);
     }
 
     int Socket::Listen(int backlog) {
@@ -350,7 +350,7 @@ public:
     Result<int, int> Send(char *buf, size_t size) {
         char* last = buf;
         do {
-            int len = send(s_, last, size - (buf - last), 0);
+            int len = send(s_, last, size - (last - buf), 0);
             if (len <= 0) {
                 return Result<int, int>(WSAGetLastError(), len);
             } else {

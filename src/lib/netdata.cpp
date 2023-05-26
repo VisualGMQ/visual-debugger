@@ -17,14 +17,17 @@ NetSender::~NetSender() {
 
 void NetSender::SendPacket(const Packet& packet) {
     auto buf = packet.Serialize();
-    if (auto result = socket_->Send("BEG", 3); result.value <= 0) {
+    if (auto result = socket_->Send("BEG", 3); result.result != 0) {
         LOGI("connect lost: ", net::Error2Str(result.result));
+        return;
     }
-    if (auto result = socket_->Send((char*)buf.data(), buf.size()); result.value <= 0) {
+    if (auto result = socket_->Send((char*)buf.data(), buf.size()); result.result != 0) {
         LOGI("connect lost: ", net::Error2Str(result.result));
+        return;
     }
-    if (auto result = socket_->Send("END", 3); result.value <= 0) {
+    if (auto result = socket_->Send("END", 3); result.result != 0) {
         LOGI("connect lost: ", net::Error2Str(result.result));
+        return;
     }
 }
 

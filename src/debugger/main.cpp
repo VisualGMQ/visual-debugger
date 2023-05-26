@@ -293,6 +293,7 @@ int main() {
             ImGui::Begin("ui", &gShowUI);
             if (ImGui::Button("clear all")) {
                 gDatas.clear();
+                gDataNames.clear();
             }
             ImGui::Text("offset: (%f, %f, %f)", gOrigin.x, gOrigin.y, gOrigin.z);
             ImGui::Text("x rotateion: %f", gRotateX);
