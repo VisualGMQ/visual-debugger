@@ -11,9 +11,6 @@
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
 
-constexpr uint32_t PORT = 8999;
-
-
 float gRotateY = 0;
 float gRotateX = 0;
 glm::vec3 gOrigin;
@@ -74,8 +71,19 @@ struct RenderData {
     Mesh mesh;
     glm::vec3 color;
     bool selected = false;
+
+    // something for ImGui
+    std::string checkboxName;
+    std::string buttonName;
     
     std::vector<RenderData> childrens;
+
+    RenderData() = default;
+
+    RenderData(const Mesh mesh, glm::vec3 color, std::string name): mesh(mesh), color(color) {
+        checkboxName = "##" + name;
+        buttonName = "G##" + name;
+    }
 };
 
 std::unordered_map<std::string, RenderData> gDatas;
@@ -95,22 +103,24 @@ void RunThread(std::unique_ptr<net::Socket>&& client) {
 
     bool shouldQuit = false;
 
-    while (!shouldQuit) {
+    while (!shouldQuit && recv) {
         auto packets = recv.RecvPacket();
-        std::unique_lock guard(m, std::defer_lock);
-        guard.lock();
-        for (const auto& packet : packets) {
-            std::vector<Vertex> vertices;
-            for (const auto& pos : packet.data.positions) {
-                vertices.push_back(Vertex{pos});
+        if (!packets.empty()) {
+            std::unique_lock guard(m, std::defer_lock);
+            guard.lock();
+            for (const auto& packet : packets) {
+                std::vector<Vertex> vertices;
+                for (const auto& pos : packet.data.positions) {
+                    vertices.push_back(Vertex{pos});
+                }
+                Mesh mesh = Mesh::Create(packet.type, vertices);
+                if (auto it = gDatas.find(packet.data.name); it == gDatas.end()) {
+                    gDataNames.push_back(packet.data.name);
+                }
+                gDatas.insert_or_assign(packet.data.name, RenderData(mesh, packet.data.color, packet.data.name));
             }
-            Mesh mesh = Mesh::Create(packet.type, vertices);
-            if (auto it = gDatas.find(packet.data.name); it == gDatas.end()) {
-                gDataNames.push_back(packet.data.name);
-            }
-            gDatas[packet.data.name] = RenderData{mesh, packet.data.color};
+            guard.unlock();
         }
-        guard.unlock();
 
         std::unique_lock l(m, std::defer_lock);
         l.lock();
@@ -120,7 +130,12 @@ void RunThread(std::unique_ptr<net::Socket>&& client) {
 
 }
 
-int main() {
+int main(int argc, char** argv) {
+    if (argc != 2) {
+        std::cout << "you must give me a port" << std::endl;
+        return 0;
+    }
+
     if (!glfwInit()) {
         LOGF("[APP]: glfw init failed");
         return 1;
@@ -130,7 +145,7 @@ int main() {
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-    GLFWwindow* window = glfwCreateWindow(WindowWidth, WindowHeight, "VisualDebugger", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(WindowWidth, WindowHeight, ("VisualDebugger: " + std::string(argv[1])).c_str(), NULL, NULL);
     if (!window) {
         LOGE("[GLFW]: create window failed");
     }
@@ -185,10 +200,12 @@ int main() {
     // init net
     auto net = net::Init();
 
+    const uint32_t port = std::atoi(argv[1]);
+
     // create socket
-    auto result = net::AddrInfoBuilder::CreateTCP("localhost", PORT).Build();
+    auto result = net::AddrInfoBuilder::CreateTCP("localhost", port).Build();
     if (result.result != 0) {
-        LOGE("create tcp on localhost:", PORT, " failed!");
+        LOGE("create tcp on localhost:", port, " failed!");
         return 1;
     }
 
@@ -201,7 +218,7 @@ int main() {
         LOGF("listen failed: ", net::Error2Str(WSAGetLastError()));
         return 1;
     }
-    LOGI("listening on ", PORT, "...");
+    LOGI("listening on ", port, "...");
    
     while (!gQuitApp) {
         auto client = socket->Accept();
@@ -304,16 +321,16 @@ int main() {
                     continue;
                 }
                 auto& data = gDatas[name];
-                ImGui::Checkbox(("##" + name).c_str(), &data.selected);
+                ImGui::Checkbox(data.checkboxName.c_str(), &data.selected);
                 ImGui::SameLine();
-                if (ImGui::Button(("G##" + name).c_str())) {
+                if (ImGui::Button(data.buttonName.c_str())) {
                     gOrigin = data.mesh.vertices[0].position;
                 }
                 ImGui::SameLine();
                 if (ImGui::CollapsingHeader(name.c_str())) {
                     for (int i = 0; i < data.mesh.vertices.size(); i++) {
                         const auto& vertex = data.mesh.vertices[i];
-                        char buf[1024] = {0};
+                        static char buf[1024] = {0};
                         snprintf(buf, sizeof(buf), "[%d]: (%f, %f, %f)", i, vertex.position.x, vertex.position.y, vertex.position.z); 
                         if (ImGui::Button(buf)) {
                             glfwSetClipboardString(window, buf);

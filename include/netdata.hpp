@@ -35,6 +35,9 @@ public:
     NetRecv(std::unique_ptr<net::Socket>&& client): client_(std::move(client)) { }
     ~NetRecv();
     std::vector<Packet> RecvPacket();
+    operator bool() const {
+        return client_ && client_->Valid();
+    }
 
 private:
     std::vector<uint8_t> cache_;
