@@ -131,10 +131,10 @@ void RunThread(std::unique_ptr<net::Socket>&& client) {
 }
 
 int main(int argc, char** argv) {
-    if (argc != 2) {
-        std::cout << "you must give me a port" << std::endl;
-        return 0;
-    }
+    // if (argc != 2) {
+    //     std::cout << "you must give me a port" << std::endl;
+    //     return 0;
+    // }
 
     if (!glfwInit()) {
         LOGF("[APP]: glfw init failed");
@@ -145,7 +145,7 @@ int main(int argc, char** argv) {
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-    GLFWwindow* window = glfwCreateWindow(WindowWidth, WindowHeight, ("VisualDebugger: " + std::string(argv[1])).c_str(), NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(WindowWidth, WindowHeight, ("VisualDebugger: " + (argc == 2 ? std::string(argv[1]) : std::string("8999"))).c_str(), NULL, NULL);
     if (!window) {
         LOGE("[GLFW]: create window failed");
     }
@@ -194,13 +194,29 @@ int main(int argc, char** argv) {
     }
     auto gridMesh = Mesh::Create(Mesh::Type::Lines, vertices);
 
+    vertices.clear();
+    vertices.push_back(Vertex{glm::vec3(0.0)});
+    vertices.push_back(Vertex{glm::vec3(10000.0, 0, 0)});
+    auto xAxis= Mesh::Create(Mesh::Type::Lines, vertices);
+    vertices.clear();
+    vertices.push_back(Vertex{glm::vec3(0.0)});
+    vertices.push_back(Vertex{glm::vec3(0, 10000.0, 0)});
+    auto yAxis= Mesh::Create(Mesh::Type::Lines, vertices);
+    vertices.clear();
+    vertices.push_back(Vertex{glm::vec3(0.0)});
+    vertices.push_back(Vertex{glm::vec3(0, 0, 10000.0)});
+    auto zAxis= Mesh::Create(Mesh::Type::Lines, vertices);
+
+
+
+
     bool show_demo_window = true;
     auto& frustum = renderer.GetCamera().GetFrustum();
 
     // init net
     auto net = net::Init();
 
-    const uint32_t port = std::atoi(argv[1]);
+    const uint32_t port = argc == 2 ? std::atoi(argv[1]) : 8999;
 
     // create socket
     auto result = net::AddrInfoBuilder::CreateTCP("localhost", port).Build();
@@ -261,6 +277,11 @@ int main(int argc, char** argv) {
                     glm::translate(glm::mat4(1.0), -gOrigin);
         renderer.SetLineWidth(1);
         renderer.Draw(gridMesh, model, glm::vec3(0.4, 0.4, 0.4));
+        renderer.SetLineWidth(3);
+        renderer.Draw(xAxis, model, glm::vec3(1, 0, 0));
+        renderer.Draw(yAxis, model, glm::vec3(0, 1, 0));
+        renderer.Draw(zAxis, model, glm::vec3(0, 0, 1));
+        renderer.SetLineWidth(1);
 
         std::unique_lock lock(m, std::defer_lock);
         lock.lock();

@@ -152,10 +152,14 @@ std::vector<uint8_t> Packet::Serialize() const {
     buf.push_back(data.positions.size());
     size_t oldSize = buf.size();
     buf.resize(oldSize +
+               4 +
                data.positions.size() * sizeof(double) * 3 +
                sizeof(double) * 3 + // color
                data.name.length() * sizeof(uint8_t));
     double* ptr = (double*)(buf.data() + oldSize);
+    uint32_t count = data.positions.size();
+    memcpy(ptr, &count, sizeof(count));
+    ptr += sizeof(count);
     for (const auto& pos: data.positions) {
         double x = pos.x;
         double y = pos.y;
@@ -189,8 +193,9 @@ std::optional<Packet> Packet::Deserialize(const uint8_t* beg, const uint8_t* end
     const uint8_t* ptr = beg;
     Mesh::Type type = static_cast<Mesh::Type>(*ptr);
     ptr ++;
-    uint8_t count = *ptr;
-    ptr ++;
+    uint32_t count = 0;
+    memcpy(&count, ptr, sizeof(count));
+    ptr += 4;
 
     std::vector<Vec3> positions;
     // serialize positions

@@ -56,6 +56,7 @@ GLenum meshtype2gl(Mesh::Type type) {
     switch (type) {
         case Mesh::Type::Triangles: return GL_TRIANGLES;
         case Mesh::Type::Lines : return GL_LINES;
+        case Mesh::Type::LineStrip : return GL_LINE_STRIP;
         case Mesh::Type::LineLoop : return GL_LINE_LOOP;
         case Mesh::Type::Points: return GL_POINTS;
     }
