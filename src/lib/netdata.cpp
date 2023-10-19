@@ -145,11 +145,9 @@ std::optional<Packet> NetRecv::analyzePacket(const uint8_t* beg, const uint8_t* 
 }
 
 std::vector<uint8_t> Packet::Serialize() const {
-    static std::vector<uint8_t> buf;
-    buf.clear();
+    std::vector<uint8_t> buf;
 
     buf.push_back(static_cast<uint8_t>(type));
-    buf.push_back(data.positions.size());
     size_t oldSize = buf.size();
     buf.resize(oldSize +
                4 +
@@ -158,8 +156,9 @@ std::vector<uint8_t> Packet::Serialize() const {
                data.name.length() * sizeof(uint8_t));
     double* ptr = (double*)(buf.data() + oldSize);
     uint32_t count = data.positions.size();
-    memcpy(ptr, &count, sizeof(count));
-    ptr += sizeof(count);
+    uint32_t* uptr = (uint32_t*)ptr;
+    memcpy(uptr, &count, sizeof(count));
+    ptr = (double*)(uptr + 1);
     for (const auto& pos: data.positions) {
         double x = pos.x;
         double y = pos.y;

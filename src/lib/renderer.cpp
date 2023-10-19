@@ -14,6 +14,33 @@ Renderer& Renderer::Instance() {
     return *instance_;
 }
 
+const char* FragSource = R"(
+    #version 410 core
+
+    out vec4 FragColor;
+
+    uniform vec3 color;
+
+    void main() {
+        FragColor = vec4(color, 1.0);
+    }
+)";
+
+const char* VertexSource = R"(
+    #version 410 core
+
+    layout (location = 0) in vec3 inPosition;
+
+    uniform mat4 model;
+    uniform mat4 view;
+    uniform mat4 project;
+
+    void main() {
+        gl_Position = project * view * model * vec4(inPosition, 1.0);
+    }
+)";
+
+
 Renderer::Renderer() {
     GL_CALL(glEnable(GL_DEPTH_TEST));
     GL_CALL(glEnable(GL_STENCIL_TEST));
@@ -24,8 +51,8 @@ Renderer::Renderer() {
     }));
 
     shader_ = std::make_unique<Shader>(
-                ShaderModule(ShaderModule::Type::Vertex, ReadWholeFile("shader/vert.shader").value()),
-                ShaderModule(ShaderModule::Type::Fragment, ReadWholeFile("shader/frag.shader").value())); 
+                ShaderModule(ShaderModule::Type::Vertex, VertexSource),
+                ShaderModule(ShaderModule::Type::Fragment, FragSource)); 
 
     arrayBuffer_ = std::make_unique<Buffer>(Buffer::Type::Array);
     indicesBuffer_ = std::make_unique<Buffer>(Buffer::Type::Element);
