@@ -1,3 +1,1 @@
-One MB Game Studio
-
-Let everyone can make game in 1MB.
+可视化调试工具For品茗
