@@ -10,6 +10,8 @@
 #include "imgui.h"
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
+#include "file_dialog.hpp"
+#include "bool_deserialize.hpp"
 
 float gRotateY = 0;
 float gRotateX = 0;
@@ -333,6 +335,18 @@ int main(int argc, char** argv) {
                 gDatas.clear();
                 gDataNames.clear();
             }
+            if (ImGui::Button("load body from file")) {
+                auto files = OpenFileDialog("open file");
+                if (!files.empty()) {
+                    auto filename = files[0];
+                    auto mesh = DeserializeMesh(filename);
+                    gDataNames.push_back(filename);
+                    RenderData data(mesh, {0, 1, 0}, filename);
+                    gDatas[filename] = std::move(data);
+                }
+            }
+
+
             ImGui::Text("offset: (%f, %f, %f)", gOrigin.x, gOrigin.y, gOrigin.z);
             ImGui::Text("x rotateion: %f", gRotateX);
             ImGui::Text("y rotateion: %f", gRotateY);
